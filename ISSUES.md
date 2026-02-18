@@ -71,6 +71,15 @@ Only one asset is parsed. The user sees a confirmation for a single swap and ass
 └───────────────────────────────┘
 ```
 
+### Why This Feature?
+
+Users naturally describe swaps involving multiple assets in a single sentence — this is how people think about portfolio rebalancing. A parser that silently drops assets creates a trust gap between what the user intended and what the system executed. In a financial product, silent data loss is unacceptable.
+
+### User Need or Competitor Gap?
+
+- **User need:** Power users managing diversified portfolios expect batch operations. Forcing one-asset-at-a-time commands adds friction and increases the chance of human error.
+- **Competitor gap:** Leading DEX aggregators (1inch, Paraswap) and AI trading bots (Banana Gun, Maestro) support multi-token swaps in a single transaction. SwapSmith's single-asset limitation puts it behind the curve for serious DeFi users.
+
 ### Solving Technique
 
 1. **Add a multi-asset detection regex** before the main parse loop:
@@ -110,6 +119,15 @@ Voice commands should record, encode, and transcribe correctly across Chrome, Sa
 | Safari (macOS)   | ✅        | ❌             | Blob sent as `audio/mp4`     |
 | Safari (iOS)     | ❌        | ❌             | `MediaRecorder` unavailable  |
 | Firefox          | ✅        | ❌             | Codec mismatch (`audio/ogg`) |
+
+### Why This Feature?
+
+Voice is the most natural and accessible input method — especially on mobile. A voice-activated trading assistant that only works on Chrome excludes over 40% of web users (Safari + Firefox combined market share). Accessibility is not optional for a product aiming for mainstream DeFi adoption.
+
+### User Need or Competitor Gap?
+
+- **User need:** Mobile-first users (particularly iOS) rely on Safari as their default browser. Voice input failing on Safari means SwapSmith's core differentiator — hands-free trading — is broken for a large segment of the target audience.
+- **Competitor gap:** Google Assistant and Siri handle voice across all browsers and platforms seamlessly. While SwapSmith isn't a general assistant, users expect the same level of cross-browser reliability from any voice-enabled product.
 
 ### Solving Technique
 
@@ -181,6 +199,15 @@ The monitor's `getBackoffInterval()` only considers order age, not API response 
    └── 15s ─────────┘── 15s ────────┘── 15s ───▶ (never backs off)
 ```
 
+### Why This Feature?
+
+The order monitor is the backbone of user trust — it's how users know their funds arrived safely. When it stalls due to rate limiting, users are left in the dark about whether their swap succeeded, failed, or is stuck. This uncertainty directly undermines confidence in the platform.
+
+### User Need or Competitor Gap?
+
+- **User need:** Users who initiate a cross-chain swap expect real-time status updates. Silence after sending funds triggers anxiety and support tickets. A resilient monitor that gracefully handles API throttling is essential for user retention.
+- **Competitor gap:** Mature swap aggregators (THORSwap, LI.FI) implement circuit breakers and adaptive polling with rate-limit awareness. SwapSmith's naive polling strategy will not scale as user volume grows.
+
 ### Solving Technique
 
 1. **Add a global rate-limit state** to `OrderMonitor`:
@@ -235,6 +262,15 @@ The system should:
                                     │  ❌ QUOTE_EXPIRED│
                                     └────────────────┘
 ```
+
+### Why This Feature?
+
+A 30-second quote TTL is standard in crypto markets due to price volatility. However, users — especially those new to DeFi — often need more than 30 seconds to review swap details, check gas fees, and decide. The current flow punishes careful users with a confusing error instead of guiding them through the natural flow of decision-making.
+
+### User Need or Competitor Gap?
+
+- **User need:** Users need time to review before committing funds. A system that silently expires quotes and then fails on confirmation erodes trust. Auto-refresh with rate-change notifications respects both market reality and user pace.
+- **Competitor gap:** Uniswap, 1inch, and Jupiter all display countdown timers and auto-refresh quotes. Users coming from these platforms expect the same behavior — SwapSmith's lack of it feels like a regression.
 
 ### Solving Technique
 
@@ -296,6 +332,15 @@ Example: User requests *"Split 1.0 ETH: 33.33% BTC, 33.33% SOL, 33.34% USDC"*
 
 Floating-point representation errors compound across multiple splits, producing dust that is silently dropped.
 
+### Why This Feature?
+
+In financial applications, every fraction of a token has real monetary value. Dust loss from rounding errors may seem negligible on a single transaction, but it compounds across thousands of users and high-value portfolios. Precision is a non-negotiable requirement for any tool that handles other people's money.
+
+### User Need or Competitor Gap?
+
+- **User need:** Users splitting large positions (e.g., 10 ETH across 5 assets) expect the full amount to be allocated. Even small discrepancies trigger distrust — "Where did the rest of my ETH go?" is a support ticket that should never exist.
+- **Competitor gap:** Professional portfolio rebalancers (Shrimpy, 3Commas) use integer arithmetic and explicit remainder assignment. SwapSmith's floating-point approach is an engineering shortcut that competitors have already solved.
+
 ### Solving Technique
 
 1. **Use integer arithmetic (basis points)** internally:
@@ -344,6 +389,15 @@ The web terminal (`terminal/page.tsx`) generates a UUID-based session ID on moun
   └────────────┘                  └────────────┘
 ```
 
+### Why This Feature?
+
+Losing conversation context on refresh is a fundamental UX failure. Users mid-swap who accidentally refresh (or whose browser auto-refreshes) lose all context — including active swap confirmations. In a financial application, this can lead to confusion about whether a swap was executed or not.
+
+### User Need or Competitor Gap?
+
+- **User need:** Web users expect session continuity. Every major chat application (WhatsApp Web, Telegram Web, Discord) persists history across refreshes. SwapSmith's terminal should meet the same baseline expectation.
+- **Competitor gap:** Competing DeFi chat interfaces (like Banana Gun's web app) persist session state. SwapSmith's amnesia on refresh makes it feel unreliable compared to alternatives.
+
 ### Solving Technique
 
 1. **Persist session ID** in `sessionStorage` (per-tab, survives refresh):
@@ -383,6 +437,15 @@ The address validation config (`bot/src/config/address-patterns.ts`) covers majo
 | Celestia     | `celestia1` + bech32      | ❌ Missing      |
 | Near         | Named accounts or 64 hex  | ❌ Missing      |
 
+### Why This Feature?
+
+The blockchain ecosystem is expanding rapidly. New L1s and L2s launch regularly, and SideShift adds support for them. If SwapSmith's address validation doesn't keep pace, users attempting swaps on newer chains will encounter failures after the quote stage — wasting time and eroding confidence in the tool.
+
+### User Need or Competitor Gap?
+
+- **User need:** Early adopters of new chains (Sui, Aptos, SEI) are often the most active DeFi users. They expect their tools to support the latest ecosystems without delay.
+- **Competitor gap:** Bridge aggregators like LI.FI and Socket maintain comprehensive chain registries that are updated within days of new chain support. SwapSmith's static regex list creates a growing blind spot.
+
 ### Solving Technique
 
 1. **Audit the SideShift coin list** — Call `getCoins()` and compare supported chains against `address-patterns.ts`.
@@ -414,6 +477,15 @@ The system should offer an intelligent retry mechanism:
 1. Diagnose the failure reason.
 2. If retryable (timeout, temporary bridge issue), offer a one-tap retry.
 3. If non-retryable (insufficient funds, invalid address), explain clearly and suggest corrections.
+
+### Why This Feature?
+
+Cross-chain swaps involve multiple networks and bridges — failures are inevitable. A product that abandons users at the point of failure forces them to re-enter all swap details from scratch. This friction is especially painful when the failure was transient (e.g., bridge congestion) and a simple retry would succeed.
+
+### User Need or Competitor Gap?
+
+- **User need:** Users who experience a failed swap need a clear path forward. "Your swap failed" with no recovery option creates helplessness. A one-tap retry with a fresh quote transforms a frustrating dead end into a seamless recovery.
+- **Competitor gap:** THORSwap and Chainflip both offer automatic retry logic for transient failures, with clear failure classification. SwapSmith's all-or-nothing approach is below the reliability bar that experienced DeFi users expect.
 
 ### Solving Technique
 
@@ -471,6 +543,15 @@ The Neon serverless PostgreSQL connection uses a single connection configuration
 ### Expected Behavior
 
 The system should gracefully handle concurrent database access with proper connection pooling, queuing, and timeout handling.
+
+### Why This Feature?
+
+Database availability is the foundation of every feature in SwapSmith — parsing, quoting, order tracking, and user management all depend on it. A connection pool that collapses under moderate load means the entire system goes down, not just one feature. This is a scaling prerequisite, not an optimization.
+
+### User Need or Competitor Gap?
+
+- **User need:** As SwapSmith grows beyond early adopters, concurrent usage will spike during market volatility — precisely when users need the bot most. Connection exhaustion during a market crash would be catastrophic for user trust and funds safety.
+- **Competitor gap:** Production-grade Telegram bots (Maestro, Unibot) handle thousands of concurrent users with connection pooling, read replicas, and failover. SwapSmith's single-connection approach will not survive its first traffic surge.
 
 ### Solving Technique
 
@@ -533,6 +614,15 @@ Environment variables prefixed with `NEXT_PUBLIC_` are embedded into the client-
 | `OPENAI_API_KEY`      | ❌ No              | Critical — cost exposure    |
 | `DATABASE_URL`        | ❌ No              | Critical — data breach      |
 | `GROQ_API_KEY`        | ❌ No              | High — API abuse            |
+
+### Why This Feature?
+
+Exposed API keys are the most common and most exploitable vulnerability in web applications. A single leaked `OPENAI_API_KEY` can result in thousands of dollars in unauthorized usage within hours. A leaked `DATABASE_URL` can lead to complete data exfiltration. This is not a hypothetical risk — it's a well-documented attack vector.
+
+### User Need or Competitor Gap?
+
+- **User need:** Users trust SwapSmith with their wallet addresses, transaction history, and swap preferences. Protecting this data through proper secret management is a baseline security requirement, not a feature.
+- **Competitor gap:** Security audits are now standard for DeFi projects. Any audit of SwapSmith would flag client-side secret exposure as a critical finding. Projects like Uniswap and Aave undergo regular audits and follow strict secret management practices — SwapSmith must do the same to be taken seriously.
 
 ### Solving Technique
 
