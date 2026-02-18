@@ -285,16 +285,16 @@ The system should:
 
 The portfolio service (`portfolio-service.ts`) splits a user's amount by percentage allocations. Due to floating-point arithmetic, the sum of split amounts can be less than the original — leaving "dust" (small residual amounts) unaccounted for.
 
-Example: User requests *"Split 1.0 ETH: 33% BTC, 33% SOL, 34% USDC"*
+Example: User requests *"Split 1.0 ETH: 33.33% BTC, 33.33% SOL, 33.34% USDC"*
 
-| Asset | Percentage | Calculated Amount | Actual Sent |
-|-------|-----------|-------------------|-------------|
-| BTC   | 33%       | 0.33000000        | 0.33        |
-| SOL   | 33%       | 0.33000000        | 0.33        |
-| USDC  | 34%       | 0.34000000        | 0.34        |
-| **Dust** | —      | **0.00000000**    | **Lost**    |
+| Asset | Percentage | Calculated Amount     | Actual Sent     |
+|-------|-----------|----------------------|-----------------|
+| BTC   | 33.33%    | 0.33330000000000004  | 0.33330000      |
+| SOL   | 33.33%    | 0.33330000000000004  | 0.33330000      |
+| USDC  | 33.34%    | 0.33340000000000003  | 0.33340000      |
+| **Dust** | —      | **~0.00000000000011** | **Lost**        |
 
-While this example is clean, real-world scenarios with odd percentages (e.g., 33.33%) produce non-trivial dust.
+Floating-point representation errors compound across multiple splits, producing dust that is silently dropped.
 
 ### Solving Technique
 
@@ -493,7 +493,7 @@ The system should gracefully handle concurrent database access with proper conne
 
 1. **Configure Neon's connection pooler** — Use Neon's built-in PgBouncer endpoint instead of direct connections:
    ```
-   DATABASE_URL=postgres://user:pass@ep-cool-name-pooler.region.neon.tech/db
+   DATABASE_URL=postgres://user:pass@ep-example-pooler.region.neon.tech/db
    ```
 2. **Add Drizzle pool config**:
    ```typescript
