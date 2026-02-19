@@ -1,0 +1,1 @@
+ALTER TABLE "checkouts" ALTER COLUMN "settle_amount" SET DATA TYPE numeric(20, 8) USING settle_amount::numeric(20, 8);
