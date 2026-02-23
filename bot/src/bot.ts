@@ -2,10 +2,6 @@ import { Telegraf, Markup, Context } from 'telegraf';
 import { message } from 'telegraf/filters';
 import rateLimit from 'telegraf-ratelimit';
 import dotenv from 'dotenv';
-import logger from './services/logger';
-import { executePortfolioStrategy } from './services/portfolio-service';
-import { transcribeAudio, ParsedCommand } from './services/groq-client';
-import { parseUserCommand } from './services/parseUserCommand';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -13,20 +9,10 @@ import axios from 'axios';
 import { execFile } from 'child_process';
 import express from 'express';
 import { sql } from 'drizzle-orm';
-
-// Services
-import { transcribeAudio } from './services/groq-client';
+import { transcribeAudio, ParsedCommand } from './services/groq-client';
 import logger, { Sentry } from './services/logger';
-
-import {
-  getOrderStatus,
-} from './services/sideshift-client';
-
-import {
-  getTopStablecoinYields,
-  formatYieldPools,
-} from './services/yield-client';
-
+import { getOrderStatus, createOrder, createCheckout } from './services/sideshift-client';
+import { getTopStablecoinYields, formatYieldPools } from './services/yield-client';
 import * as db from './services/database';
 import { DCAScheduler } from './services/dca-scheduler';
 import { resolveAddress, isNamingService } from './services/address-resolver';
@@ -34,7 +20,7 @@ import { limitOrderWorker } from './workers/limitOrderWorker';
 import { OrderMonitor } from './services/order-monitor';
 import { parseUserCommand } from './services/parseUserCommand';
 import { isValidAddress } from './config/address-patterns';
-import { expressIntegration } from '@sentry/node';
+import { executePortfolioStrategy } from './services/portfolio-service';
 
 dotenv.config();
 
@@ -51,12 +37,12 @@ const bot = new Telegraf(BOT_TOKEN);
 
 // Configure rate limiting middleware
 const limit = rateLimit({
-  window: 60000, // 1 minute window
-  limit: 20, // Maximum 20 messages per window per user
-  keyGenerator: (ctx) => {
+  window: 60000,
+  limit: 20,
+  keyGenerator: (ctx: Context) => {
     return ctx.from?.id.toString() || 'unknown';
   },
-  onLimitExceeded: async (ctx) => {
+  onLimitExceeded: async (ctx: Context) => {
     await ctx.reply('⚠️ Too many requests! Please slow down. Rate limit: 20 messages per minute.');
   },
 });
@@ -428,13 +414,12 @@ bot.action('confirm_portfolio', async (ctx) => {
 
   const { fromAsset, fromChain, amount, portfolio, settleAddress } = state.parsedCommand;
 
-  // 1. Validate Input
   if (!portfolio || portfolio.length === 0) {
     return ctx.editMessageText('❌ No portfolio allocation found.');
   }
 
   const totalPercentage = portfolio.reduce((sum: number, p: NonNullable<ParsedCommand['portfolio']>[number]) => sum + p.percentage, 0);
-  if (Math.abs(totalPercentage - 100) > 1) { // Allow 1% tolerance
+  if (Math.abs(totalPercentage - 100) > 1) {
     return ctx.editMessageText(`❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`);
   }
 
@@ -442,7 +427,18 @@ bot.action('confirm_portfolio', async (ctx) => {
     return ctx.editMessageText('❌ Invalid amount.');
   }
 
-  /* ---------------- Limit Order ---------------- */
+  try {
+    await ctx.answerCbQuery('Processing...');
+    await executePortfolioStrategy(userId, state.parsedCommand);
+
+    ctx.editMessageText('✅ Portfolio strategy executed successfully!');
+  } catch (error) {
+    logger.error('Portfolio execution error:', error);
+    ctx.editMessageText('❌ Failed to execute portfolio strategy.');
+  } finally {
+    await db.clearConversationState(userId);
+  }
+});
 
   if (parsed.intent === 'limit_order') {
     if (!parsed.settleAddress) {
@@ -460,9 +456,6 @@ bot.action('confirm_portfolio', async (ctx) => {
       ])
     );
   }
-
-
-  /* ---------------- Swap / Checkout ---------------- */
 
   if (['swap', 'checkout'].includes(parsed.intent)) {
     if (!parsed.settleAddress) {
@@ -502,11 +495,9 @@ const dcaScheduler = new DCAScheduler();
 
 async function start() {
   try {
-    // Add Sentry request handler for Express
     if (process.env.SENTRY_DSN) {
       Sentry.init({
         dsn: process.env.SENTRY_DSN,
-        integrations: [expressIntegration()],
         tracesSampleRate: 1.0,
       });
     }

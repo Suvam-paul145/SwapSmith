@@ -1,10 +1,11 @@
 # ---------- Builder ----------
 FROM node:20-alpine AS builder
 
+# Set up root working directory
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+# Copy the shared directory 
+COPY shared ./shared
 
 RUN apk add --no-cache ffmpeg
 COPY . .
@@ -12,22 +13,24 @@ COPY . .
 ARG GROQ_API_KEY
 ENV GROQ_API_KEY=$GROQ_API_KEY
 
+COPY frontend/package*.json ./
+RUN npm ci
 
+COPY frontend/ ./
 RUN npm run build
-
 
 # ---------- Runner ----------
 FROM node:20-alpine AS runner
 
-WORKDIR /app
+WORKDIR /app/frontend
 
 ENV NODE_ENV=production
 RUN apk add --no-cache ffmpeg
 
-# copy standalone output
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# copy standalone output (adjust paths to accommodate the new WORKDIR)
+COPY --from=builder /app/frontend/.next/standalone ./
+COPY --from=builder /app/frontend/.next/static ./.next/static
+COPY --from=builder /app/frontend/public ./public
 
 EXPOSE 3000
 
