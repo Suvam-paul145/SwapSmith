@@ -6,8 +6,10 @@
     "outDir": "./dist",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "downlevelIteration": true,
+    "resolveJsonModule": true
   },
   "include": ["src/**/*", "../shared/schema.ts"],
-  "exclude": ["drizzle.config.ts", "src/workers/limitOrderWorker.ts"]
+  "exclude": ["drizzle.config.ts", "src/workers/limitOrderWorker.ts", "src/workers/price-alerts.ts"]
 }
