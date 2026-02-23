@@ -1,21 +1,22 @@
 import { Telegraf, Markup, Context } from 'telegraf';
 import { message } from 'telegraf/filters';
 import dotenv from 'dotenv';
-import logger from './services/logger';
+import logger, { handleError } from './services/logger';
+
 import { executePortfolioStrategy } from './services/portfolio-service';
 import { transcribeAudio, ParsedCommand } from './services/groq-client';
-import { parseUserCommand } from './services/parseUserCommand';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import axios from 'axios';
-import { spawn } from 'child_process';
+import { exec } from 'child_process';
 import express from 'express';
 import { sql } from 'drizzle-orm';
 
 // Services
-import { transcribeAudio } from './services/groq-client';
-import logger, { Sentry } from './services/logger';
+import { Sentry } from './services/logger';
+
+
 
 import {
   getOrderStatus,
@@ -89,8 +90,9 @@ const orderMonitor = new OrderMonitor({
         parse_mode: 'Markdown',
       });
     } catch (e) {
-      logger.error('Order update notify failed:', e);
+      handleError('OrderUpdateNotifyFailed', e, { from: { id: telegramId } });
     }
+
   },
 });
 
@@ -248,11 +250,13 @@ async function handleTextMessage(
         Markup.button.webApp('📱 Batch Sign', MINI_APP_URL),
         Markup.button.callback('❌ Cancel', 'cancel_swap'),
       ]),
-    }
-  );
-});
+    );
+  }
+}
+
 
 bot.action(/deposit_(.+)/, async (ctx) => {
+
   const poolId = ctx.match[1];
 
   await ctx.answerCbQuery();
@@ -338,45 +342,30 @@ bot.action('confirm_portfolio', async (ctx) => {
     return ctx.editMessageText('❌ Invalid amount.');
   }
 
-  /* ---------------- Limit Order ---------------- */
-
-  if (parsed.intent === 'limit_order') {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
+  // Execute portfolio strategy
+  try {
+    await ctx.answerCbQuery('Executing portfolio strategy...');
+    const result = await executePortfolioStrategy(userId, fromAsset, fromChain, amount, portfolio, settleAddress, bot);
+    
+    if (result.success) {
+      ctx.editMessageText(
+        `✅ *Portfolio Strategy Executed*\n\n` +
+        `*Orders Created:* ${result.orderIds?.length || 0}\n` +
+        `*Status:* Processing\n\n` +
+        `You'll receive notifications as orders complete.`,
+        { parse_mode: 'Markdown' }
+      );
+    } else {
+      ctx.editMessageText(`❌ Portfolio execution failed: ${result.error || 'Unknown error'}`);
     }
-
-    await db.setConversationState(userId, { parsedCommand: parsed });
-
-    return ctx.reply(
-      'Confirm Limit Order?',
-      Markup.inlineKeyboard([
-        Markup.button.callback('✅ Yes', 'confirm_limit_order'),
-        Markup.button.callback('❌ Cancel', 'cancel_swap'),
-      ])
-    );
+  } catch (error) {
+    handleError('PortfolioExecutionFailed', error, ctx);
+    ctx.editMessageText('❌ Failed to execute portfolio strategy.');
+  } finally {
+    await db.clearConversationState(userId);
   }
+});
 
-
-  /* ---------------- Swap / Checkout ---------------- */
-
-  if (['swap', 'checkout'].includes(parsed.intent)) {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
-    }
-
-    await db.setConversationState(userId, { parsedCommand: parsed });
-
-    return ctx.reply(
-      'Confirm parameters?',
-      Markup.inlineKeyboard([
-        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
-        Markup.button.callback('❌ Cancel', 'cancel_swap'),
-      ])
-    );
-  }
-}
 
 /* -------------------------------------------------------------------------- */
 /* ACTIONS                                                                    */
@@ -432,10 +421,7 @@ async function start() {
     process.once('SIGINT', () => shutdown('SIGINT'));
     process.once('SIGTERM', () => shutdown('SIGTERM'));
   } catch (e) {
-    logger.error('Startup failed', e);
-    if (process.env.SENTRY_DSN) {
-      Sentry.captureException(e);
-    }
+    handleError('StartupFailed', e);
     process.exit(1);
   }
 }
