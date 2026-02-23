@@ -1,7 +1,7 @@
 services:
   frontend:
     build:
-      context: ./frontend
+      context: .
       dockerfile: Dockerfile
     container_name: swapsmith-frontend
     ports:
@@ -14,7 +14,7 @@ services:
   
   bot:
     build:
-      context: ./bot
+      context: .
       dockerfile: Dockerfile
     container_name: swapsmith-bot
     restart: unless-stopped
