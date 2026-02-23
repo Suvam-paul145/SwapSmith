@@ -119,6 +119,17 @@ bot.command('yield', async (ctx) => {
   }
 });
 
+bot.command('market', async (ctx) => {
+  await ctx.reply('📊 Fetching market intelligence...');
+  try {
+    const marketData = await getMarketData();
+    const message = formatMarketMessage(marketData);
+    ctx.replyWithMarkdown(message);
+  } catch {
+    ctx.reply('❌ Failed to fetch market data.');
+  }
+});
+
 
 bot.command('clear', async (ctx) => {
   if (ctx.from) {
