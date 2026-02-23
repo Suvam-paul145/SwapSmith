@@ -2,6 +2,8 @@ import { pgTable, serial, text, bigint, timestamp, integer, real, unique, pgEnum
 import { relations, sql } from 'drizzle-orm';
 
 // --- ENUMS ---
+export const planType = pgEnum('plan_type', ['free', 'premium', 'pro']);
+
 export const rewardActionType = pgEnum('reward_action_type', [
   'course_complete',
   'module_complete',
@@ -30,6 +32,14 @@ export const users = pgTable('users', {
   sessionTopic: text('session_topic'),
   totalPoints: integer('total_points').notNull().default(0),
   totalTokensClaimed: numeric('total_tokens_claimed', { precision: 20, scale: 8 }).notNull().default('0'),
+  // Plan & subscription fields
+  plan: planType('plan').notNull().default('free'),
+  planPurchasedAt: timestamp('plan_purchased_at'),
+  planExpiresAt: timestamp('plan_expires_at'),
+  // Daily usage counters
+  dailyChatCount: integer('daily_chat_count').notNull().default(0),
+  dailyTerminalCount: integer('daily_terminal_count').notNull().default(0),
+  usageResetAt: timestamp('usage_reset_at').defaultNow(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -190,6 +200,27 @@ export const watchlist = pgTable('watchlist', {
 }, (table) => [
   index("idx_watchlist_user_id").on(table.userId),
   index("idx_watchlist_user_coin_network").on(table.userId, table.coin, table.network),
+]);
+
+// --- PRICE ALERTS SCHEMA ---
+
+export const priceAlerts = pgTable('price_alerts', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  coin: text('coin').notNull(),
+  network: text('network').notNull(),
+  name: text('name').notNull(),
+  targetPrice: numeric('target_price', { precision: 20, scale: 8 }).notNull(),
+  condition: text('condition').notNull(), // 'gt' (greater than) or 'lt' (less than)
+  isActive: boolean('is_active').notNull().default(true),
+  triggeredAt: timestamp('triggered_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_price_alerts_user_id").on(table.userId),
+  index("idx_price_alerts_telegram_id").on(table.telegramId),
+  index("idx_price_alerts_is_active").on(table.isActive),
+  index("idx_price_alerts_coin_network").on(table.coin, table.network),
 ]);
 
 // --- FRONTEND SCHEMAS ---
@@ -400,185 +431,25 @@ export const rewardsLogRelations = relations(rewardsLog, ({one}) => ({
 	}),
 }));
 
+// --- PLAN PURCHASES TABLE ---
 
-// --- SOCIAL TRADING SCHEMAS ---
-
-// Trader statistics - calculated performance metrics
-export const traderStats = pgTable('trader_stats', {
-  id: serial('id').primaryKey(),
+export const planPurchases = pgTable('plan_purchases', {
+  id: uuid('id').primaryKey().defaultRandom(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  totalTrades: integer('total_trades').notNull().default(0),
-  successfulTrades: integer('successful_trades').notNull().default(0),
-  totalVolumeUSD: numeric('total_volume_usd', { precision: 20, scale: 2 }).notNull().default('0'),
-  followerCount: integer('follower_count').notNull().default(0),
-  totalCopies: integer('total_copies').notNull().default(0),
-  averageReturn: real('average_return').notNull().default(0),
-  winRate: real('win_rate').notNull().default(0),
-  reputationScore: real('reputation_score').notNull().default(0),
-  lastUpdated: timestamp('last_updated').defaultNow(),
-  createdAt: timestamp('created_at').defaultNow(),
+  plan: planType('plan').notNull(),
+  coinsSpent: integer('coins_spent').notNull(),
+  durationDays: integer('duration_days').notNull(),
+  activatedAt: timestamp('activated_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => [
-  index("idx_trader_stats_user_id").on(table.userId),
-  index("idx_trader_stats_reputation").on(table.reputationScore),
+  index("idx_plan_purchases_user_id").on(table.userId),
 ]);
 
-// Followed traders - tracks who follows whom
-export const followedTraders = pgTable('followed_traders', {
-  id: serial('id').primaryKey(),
-  followerId: integer('follower_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  traderId: integer('trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  notifyOnPortfolioChange: boolean('notify_on_portfolio_change').notNull().default(true),
-  notifyOnNewTrade: boolean('notify_on_new_trade').notNull().default(true),
-  createdAt: timestamp('created_at').defaultNow(),
-}, (table) => [
-  index("idx_followed_traders_follower").on(table.followerId),
-  index("idx_followed_traders_trader").on(table.traderId),
-  unique("unique_follower_trader").on(table.followerId, table.traderId),
-]);
-
-// Shared portfolios - stores shareable portfolio configurations
-export const sharedPortfolios = pgTable('shared_portfolios', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  shareCode: text('share_code').notNull().unique(),
-  title: text('title').notNull(),
-  description: text('description'),
-  fromAsset: text('from_asset').notNull(),
-  fromChain: text('from_chain'),
-  portfolio: jsonb('portfolio').notNull(),
-  isPublic: boolean('is_public').notNull().default(true),
-  copyCount: integer('copy_count').notNull().default(0),
-  likeCount: integer('like_count').notNull().default(0),
-  viewCount: integer('view_count').notNull().default(0),
-  expiresAt: timestamp('expires_at'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => [
-  index("idx_shared_portfolios_user").on(table.userId),
-  index("idx_shared_portfolios_code").on(table.shareCode),
-  index("idx_shared_portfolios_public").on(table.isPublic),
-]);
-
-// Portfolio copies - tracks who copied which portfolio
-export const portfolioCopies = pgTable('portfolio_copies', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  portfolioId: integer('portfolio_id').notNull().references(() => sharedPortfolios.id, { onDelete: 'cascade' }),
-  originalTraderId: integer('original_trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  copiedAmount: numeric('copied_amount', { precision: 20, scale: 8 }),
-  status: text('status').notNull().default('pending'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => [
-  index("idx_portfolio_copies_user").on(table.userId),
-  index("idx_portfolio_copies_portfolio").on(table.portfolioId),
-  index("idx_portfolio_copies_trader").on(table.originalTraderId),
-]);
-
-// Portfolio notifications - queue for follower notifications
-export const portfolioNotifications = pgTable('portfolio_notifications', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  traderId: integer('trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  portfolioId: integer('portfolio_id').references(() => sharedPortfolios.id, { onDelete: 'set null' }),
-  type: text('type').notNull(),
-  title: text('title').notNull(),
-  message: text('message').notNull(),
-  isRead: boolean('is_read').notNull().default(false),
-  sentAt: timestamp('sent_at'),
-  createdAt: timestamp('created_at').defaultNow(),
-}, (table) => [
-  index("idx_portfolio_notifications_user").on(table.userId),
-  index("idx_portfolio_notifications_read").on(table.isRead),
-  index("idx_portfolio_notifications_created").on(table.createdAt),
-]);
-
-// Trader portfolio history - tracks historical portfolio changes
-export const portfolioHistory = pgTable('portfolio_history', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  portfolioId: integer('portfolio_id').references(() => sharedPortfolios.id, { onDelete: 'set null' }),
-  changeType: text('change_type').notNull(),
-  previousPortfolio: jsonb('previous_portfolio'),
-  newPortfolio: jsonb('new_portfolio'),
-  metadata: jsonb('metadata'),
-  createdAt: timestamp('created_at').defaultNow(),
-}, (table) => [
-  index("idx_portfolio_history_user").on(table.userId),
-  index("idx_portfolio_history_portfolio").on(table.portfolioId),
-]);
-
-
-// --- RELATIONS FOR SOCIAL TRADING ---
-
-export const traderStatsRelations = relations(traderStats, ({one}) => ({
-	user: one(users, {
-		fields: [traderStats.userId],
-		references: [users.id]
-	}),
+export const planPurchasesRelations = relations(planPurchases, ({one}) => ({
+  user: one(users, {
+    fields: [planPurchases.userId],
+    references: [users.id],
+  }),
 }));
 
-export const followedTradersRelations = relations(followedTraders, ({one}) => ({
-	follower: one(users, {
-		fields: [followedTraders.followerId],
-		references: [users.id],
-		relationName: 'follower'
-	}),
-	trader: one(users, {
-		fields: [followedTraders.traderId],
-		references: [users.id],
-		relationName: 'trader'
-	}),
-}));
-
-export const sharedPortfoliosRelations = relations(sharedPortfolios, ({one}) => ({
-	user: one(users, {
-		fields: [sharedPortfolios.userId],
-		references: [users.id]
-	}),
-}));
-
-export const portfolioCopiesRelations = relations(portfolioCopies, ({one}) => ({
-	user: one(users, {
-		fields: [portfolioCopies.userId],
-		references: [users.id],
-		relationName: 'copyUser'
-	}),
-	portfolio: one(sharedPortfolios, {
-		fields: [portfolioCopies.portfolioId],
-		references: [sharedPortfolios.id]
-	}),
-	originalTrader: one(users, {
-		fields: [portfolioCopies.originalTraderId],
-		references: [users.id],
-		relationName: 'originalTrader'
-	}),
-}));
-
-export const portfolioNotificationsRelations = relations(portfolioNotifications, ({one}) => ({
-	user: one(users, {
-		fields: [portfolioNotifications.userId],
-		references: [users.id],
-		relationName: 'notificationUser'
-	}),
-	trader: one(users, {
-		fields: [portfolioNotifications.traderId],
-		references: [users.id],
-		relationName: 'notificationTrader'
-	}),
-	portfolio: one(sharedPortfolios, {
-		fields: [portfolioNotifications.portfolioId],
-		references: [sharedPortfolios.id]
-	}),
-}));
-
-export const portfolioHistoryRelations = relations(portfolioHistory, ({one}) => ({
-	user: one(users, {
-		fields: [portfolioHistory.userId],
-		references: [users.id]
-	}),
-	portfolio: one(sharedPortfolios, {
-		fields: [portfolioHistory.portfolioId],
-		references: [sharedPortfolios.id]
-	}),
-}));
