@@ -8,7 +8,15 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "downlevelIteration": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "paths": {
+      "@/*": ["./*"],
+      "dotenv": ["./node_modules/dotenv"],
+      "drizzle-kit": ["./node_modules/drizzle-kit"],
+      "drizzle-orm": ["./node_modules/drizzle-orm"],
+      "drizzle-orm/*": ["./node_modules/drizzle-orm/*"],
+      "winston": ["./node_modules/winston"],
+    },
   },
   "include": ["src/**/*", "../shared/schema.ts"],
   "exclude": ["drizzle.config.ts", "src/workers/limitOrderWorker.ts", "src/workers/price-alerts.ts"]

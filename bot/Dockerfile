@@ -8,26 +8,24 @@ RUN apt-get update && apt-get install -y \
     python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set a root working directory
+# Set the working directory in the container
 WORKDIR /usr/src/app
 
-# Copy the shared directory FIRST so it resolves correctly via relative imports
+# 1. Copy the shared directory first
 COPY shared ./shared
 
-# Set the working directory for the bot
+# 2. Change working directory to bot
 WORKDIR /usr/src/app/bot
 
-# Copy package.json and package-lock.json from the bot directory
+# 3. Copy bot package files and install dependencies
 COPY bot/package*.json ./
-
-# Install app dependencies
 RUN npm ci
 
-# Copy the rest of your bot's source code
+# 4. Copy the rest of the bot source code
 COPY bot/ ./
 
 # Run the build script to compile TypeScript to JavaScript
 RUN npm run build
 
-# Your app's start command (from package.json)
-CMD [ "npm", "run", "start" ]
+# Your app's start command
+CMD [ "npm", "run", "start:render" ]
