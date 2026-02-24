@@ -2,6 +2,8 @@ import { pgTable, serial, text, bigint, timestamp, integer, real, unique, pgEnum
 import { relations, sql } from 'drizzle-orm';
 
 // --- ENUMS ---
+export const planType = pgEnum('plan_type', ['free', 'premium', 'pro']);
+
 export const rewardActionType = pgEnum('reward_action_type', [
   'course_complete',
   'module_complete',
@@ -30,6 +32,14 @@ export const users = pgTable('users', {
   sessionTopic: text('session_topic'),
   totalPoints: integer('total_points').notNull().default(0),
   totalTokensClaimed: numeric('total_tokens_claimed', { precision: 20, scale: 8 }).notNull().default('0'),
+  // Plan & subscription fields
+  plan: planType('plan').notNull().default('free'),
+  planPurchasedAt: timestamp('plan_purchased_at'),
+  planExpiresAt: timestamp('plan_expires_at'),
+  // Daily usage counters
+  dailyChatCount: integer('daily_chat_count').notNull().default(0),
+  dailyTerminalCount: integer('daily_terminal_count').notNull().default(0),
+  usageResetAt: timestamp('usage_reset_at').defaultNow(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -190,6 +200,27 @@ export const watchlist = pgTable('watchlist', {
 }, (table) => [
   index("idx_watchlist_user_id").on(table.userId),
   index("idx_watchlist_user_coin_network").on(table.userId, table.coin, table.network),
+]);
+
+// --- PRICE ALERTS SCHEMA ---
+
+export const priceAlerts = pgTable('price_alerts', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  coin: text('coin').notNull(),
+  network: text('network').notNull(),
+  name: text('name').notNull(),
+  targetPrice: numeric('target_price', { precision: 20, scale: 8 }).notNull(),
+  condition: text('condition').notNull(), // 'gt' (greater than) or 'lt' (less than)
+  isActive: boolean('is_active').notNull().default(true),
+  triggeredAt: timestamp('triggered_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_price_alerts_user_id").on(table.userId),
+  index("idx_price_alerts_telegram_id").on(table.telegramId),
+  index("idx_price_alerts_is_active").on(table.isActive),
+  index("idx_price_alerts_coin_network").on(table.coin, table.network),
 ]);
 
 // --- FRONTEND SCHEMAS ---
@@ -399,3 +430,26 @@ export const rewardsLogRelations = relations(rewardsLog, ({one}) => ({
 		references: [users.id]
 	}),
 }));
+
+// --- PLAN PURCHASES TABLE ---
+
+export const planPurchases = pgTable('plan_purchases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  plan: planType('plan').notNull(),
+  coinsSpent: integer('coins_spent').notNull(),
+  durationDays: integer('duration_days').notNull(),
+  activatedAt: timestamp('activated_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => [
+  index("idx_plan_purchases_user_id").on(table.userId),
+]);
+
+export const planPurchasesRelations = relations(planPurchases, ({one}) => ({
+  user: one(users, {
+    fields: [planPurchases.userId],
+    references: [users.id],
+  }),
+}));
+
