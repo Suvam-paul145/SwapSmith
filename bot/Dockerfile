@@ -28,4 +28,4 @@ COPY bot/ ./
 RUN npm run build
 
 # Your app's start command
-CMD [ "npm", "run", "start" ]
+CMD [ "npm", "run", "start:render" ]

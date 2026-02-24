@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/bot.js",
+    "start:render": "node dist/bot/src/bot.js",
     "dev": "ts-node-dev -r dotenv/config --respawn --transpile-only src/bot.ts",
     "test": "jest",
     "db:gen": "drizzle-kit generate",

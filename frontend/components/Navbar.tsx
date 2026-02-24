@@ -88,7 +88,7 @@ export default function Navbar() {
           scrolled ? "border-b border-zinc-200 dark:border-zinc-800 shadow-sm" : "border-b border-transparent"
         } ${isTerminal ? "bg-white/80 dark:bg-zinc-950/80" : "bg-white/85 dark:bg-[#08080f]/85"}`}
       >
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-full flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-full grid grid-cols-[auto_1fr_auto] items-center">
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group shrink-0">
@@ -101,32 +101,32 @@ export default function Navbar() {
           </Link>
 
           {/* Center Navigation */}
-          <div className="hidden md:flex items-center justify-center flex-1 min-w-0">
+          <div className="flex items-center justify-center px-4 flex-wrap">
             <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/40 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800">
               <Link
                 href="/"
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shrink-0 ${
                   pathname === "/" 
                   ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-white shadow-sm" 
                   : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                 }`}
               >
                 <Home className="w-4 h-4" />
-                <span>Home</span>
+                <span className="hidden lg:inline">Home</span>
               </Link>
 
               {NAV_ITEMS.map(({ href, label, Icon }) => (
                 <Link
                   key={href}
                   href={href}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shrink-0 ${
                     pathname === href
                       ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-white shadow-sm"
                       : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
-                  <span className="hidden lg:inline">{label}</span>
+                  <span className="hidden xl:inline">{label}</span>
                 </Link>
               ))}
             </div>
@@ -189,7 +189,7 @@ export default function Navbar() {
 
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+              className="sm:hidden p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
             >
               <Menu className="w-6 h-6" />
             </button>
