@@ -354,12 +354,17 @@ bot.action('confirm_portfolio', async (ctx) => {
 
   try {
     await ctx.answerCbQuery('Processing...');
-    await executePortfolioStrategy(userId, state.parsedCommand);
+    const result = await executePortfolioStrategy(userId, state.parsedCommand);
 
-    ctx.editMessageText('✅ Portfolio strategy executed successfully!');
+    const summary = result.successfulOrders
+      .map(o => `✅ ${o.allocation.toAsset}: ${o.swapAmount.toFixed(4)} ${fromAsset}`)
+      .join('\n');
+
+    ctx.editMessageText(`✅ Portfolio strategy executed successfully!\n\n${summary}`);
   } catch (error) {
-    logger.error('Portfolio execution error:', error);
-    ctx.editMessageText('❌ Failed to execute portfolio strategy.');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Portfolio execution error:', { userId, error: errorMessage });
+    ctx.editMessageText(`❌ Portfolio execution failed: ${errorMessage}`);
   } finally {
     await db.clearConversationState(userId);
   }

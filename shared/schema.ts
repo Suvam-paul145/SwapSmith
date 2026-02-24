@@ -315,6 +315,7 @@ export const rewardsLog = pgTable('rewards_log', {
   index("idx_rewards_log_user_id").on(table.userId),
 ]);
 
+<<<<<<< 356
 
 // --- GAS FEE OPTIMIZATION SCHEMAS ---
 
@@ -408,6 +409,8 @@ export const gasOptimizationHistory = pgTable('gas_optimization_history', {
   index("idx_gas_optimization_history_swap_id").on(table.swapId),
 ]);
 
+=======
+>>>>>>> main
 
 // --- RELATIONS ---
 
