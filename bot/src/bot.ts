@@ -1,4 +1,4 @@
-import { Telegraf, Markup, Context } from 'telegraf';
+import { Telegraf, Markup, Context, Update } from 'telegraf';
 import { message } from 'telegraf/filters';
 import rateLimit from 'telegraf-ratelimit';
 import dotenv from 'dotenv';
@@ -168,7 +168,7 @@ bot.on(message('voice'), async (ctx) => {
 /* -------------------------------------------------------------------------- */
 
 async function handleTextMessage(
-  ctx: Context,
+  ctx: Context<Update>,
   text: string,
   inputType: 'text' | 'voice' = 'text'
 ) {
