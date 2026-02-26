@@ -7,10 +7,13 @@ import SwapConfirmation from './SwapConfirmation';
 import PortfolioSummary, { PortfolioItem } from './PortfolioSummary'; // Added Import
 import TrustIndicators from './TrustIndicators';
 import IntentConfirmation from './IntentConfirmation';
+import GasFeeDisplay from './GasFeeDisplay';
+import GasComparisonChart from './GasComparisonChart';
 import { ParsedCommand } from '@/utils/groq-client';
 import { useErrorHandler, ErrorType } from '@/hooks/useErrorHandler';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAuth } from '@/hooks/useAuth';
+
 
 // Export QuoteData to be used in PortfolioSummary
 export interface QuoteData {
@@ -757,23 +760,49 @@ return (
                     {/* Inject your Custom Components (SwapConfirmation etc) here */}
                     {msg.type === 'intent_confirmation' && <IntentConfirmation command={msg.data?.parsedCommand} onConfirm={handleIntentConfirm} />}
                     {msg.type === 'swap_confirmation' && msg.data?.quoteData && (
-                      <SwapConfirmation 
-                        quote={msg.data.quoteData} 
-                        confidence={msg.data.confidence}
-                        onAmountChange={(newAmount) => {
-                          // Update the quote with the new amount
-                          const quoteData = msg.data?.quoteData;
-                          if (quoteData) {
-                            const updatedQuote = { ...quoteData, depositAmount: newAmount };
-                            addMessage({
-                              role: 'assistant',
-                              content: `Amount updated to ${newAmount} ${quoteData.depositCoin}. Please review the new swap details.`,
-                              type: 'message'
-                            });
-                          }
-                        }}
-                      />
+                      <div className="space-y-4">
+                        {/* Gas Fee Comparison */}
+                        {msg.data?.quoteData?.depositNetwork && msg.data?.quoteData?.settleNetwork && (
+                          <div className="mb-4">
+                            <GasComparisonChart
+                              fromChain={msg.data.quoteData.depositNetwork}
+                              toChain={msg.data.quoteData.settleNetwork}
+                              showRecommendation={true}
+                              className="mb-4"
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <GasFeeDisplay
+                                chain={msg.data.quoteData.depositNetwork}
+                                compact={true}
+                                className="bg-white/5 rounded-lg p-2"
+                              />
+                              <GasFeeDisplay
+                                chain={msg.data.quoteData.settleNetwork}
+                                compact={true}
+                                className="bg-white/5 rounded-lg p-2"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        <SwapConfirmation 
+                          quote={msg.data.quoteData} 
+                          confidence={msg.data.confidence}
+                          onAmountChange={(newAmount) => {
+                            // Update the quote with the new amount
+                            const quoteData = msg.data?.quoteData;
+                            if (quoteData) {
+                              const updatedQuote = { ...quoteData, depositAmount: newAmount };
+                              addMessage({
+                                role: 'assistant',
+                                content: `Amount updated to ${newAmount} ${quoteData.depositCoin}. Please review the new swap details.`,
+                                type: 'message'
+                              });
+                            }
+                          }}
+                        />
+                      </div>
                     )}
+
                   </div>
                 </div>
               )}
