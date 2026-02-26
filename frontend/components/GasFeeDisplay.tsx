@@ -14,6 +14,8 @@ interface GasEstimate {
   confidence: number;
   source: string;
   formatted?: string;
+  timestamp?: Date;
+  expiresAt?: Date;
 }
 
 interface GasPrediction {
