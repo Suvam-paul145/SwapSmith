@@ -124,11 +124,10 @@ export default function AdminRegisterPage() {
           <div className="flex flex-col gap-5 px-8 xl:px-12 py-10 w-full">
             {/* Logo */}
             <div className="flex items-center gap-2.5 mb-1">
-              <div className="flex items-center justify-center w-9 h-9 rounded-xl"
-                style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}>
-                <ShieldCheck className="w-4 h-4" style={{ color: '#a78bfa' }} />
+              <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center w-9 h-9">
+                <Zap className="w-5 h-5 text-white" fill="white" />
               </div>
-              <span className="font-bold text-base tracking-tight" style={{ color: '#fff' }}>Admin Portal</span>
+              <span className="font-black text-lg uppercase tracking-tighter text-zinc-900 dark:text-white" style={{ letterSpacing: '-0.04em' }}>SwapSmith</span>
             </div>
 
             <div>
