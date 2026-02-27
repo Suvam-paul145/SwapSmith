@@ -402,6 +402,102 @@ export const rewardsLog = pgTable('rewards_log', {
   index("idx_rewards_log_user_id").on(table.userId),
 ]);
 
+<<<<<<< 356
+
+// --- GAS FEE OPTIMIZATION SCHEMAS ---
+
+export const gasEstimates = pgTable('gas_estimates', {
+  id: serial('id').primaryKey(),
+  chain: text('chain').notNull(),
+  network: text('network').notNull(),
+  gasPrice: text('gas_price').notNull(), // in wei or gwei
+  gasPriceUnit: text('gas_price_unit').notNull().default('gwei'),
+  priorityFee: text('priority_fee'), // for EIP-1559 chains
+  baseFee: text('base_fee'), // for EIP-1559 chains
+  estimatedTimeSeconds: integer('estimated_time_seconds'), // estimated confirmation time
+  confidence: real('confidence'), // confidence score 0-100
+  source: text('source').notNull(), // 'ethgasstation', 'gelato', 'provider', etc.
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_gas_estimates_chain_network").on(table.chain, table.network),
+  index("idx_gas_estimates_expires").on(table.expiresAt),
+]);
+
+export const gasTokens = pgTable('gas_tokens', {
+  id: serial('id').primaryKey(),
+  symbol: text('symbol').notNull().unique(),
+  name: text('name').notNull(),
+  contractAddress: text('contract_address').notNull(),
+  chain: text('chain').notNull(),
+  network: text('network').notNull(),
+  decimals: integer('decimals').notNull().default(18),
+  tokenType: text('token_type').notNull(), // 'chi', 'gst', 'custom'
+  discountPercent: real('discount_percent').notNull().default(0), // discount % when using this token
+  isActive: boolean('is_active').notNull().default(true),
+  metadata: jsonb('metadata'), // additional token metadata
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index("idx_gas_tokens_symbol").on(table.symbol),
+  index("idx_gas_tokens_chain_network").on(table.chain, table.network),
+]);
+
+export const userGasPreferences = pgTable('user_gas_preferences', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().unique(),
+  preferredGasToken: text('preferred_gas_token').references(() => gasTokens.symbol),
+  autoOptimize: boolean('auto_optimize').notNull().default(true),
+  maxGasPrice: text('max_gas_price'), // max gas price user is willing to pay
+  priorityLevel: text('priority_level').notNull().default('medium'), // 'low', 'medium', 'high'
+  batchTransactions: boolean('batch_transactions').notNull().default(false),
+  notificationsEnabled: boolean('notifications_enabled').notNull().default(true),
+  customSettings: jsonb('custom_settings'), // additional user-specific settings
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_user_gas_preferences_user_id").on(table.userId),
+]);
+
+export const batchedTransactions = pgTable('batched_transactions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  batchId: text('batch_id').notNull().unique(),
+  transactions: jsonb('transactions').notNull(), // array of transactions to batch
+  status: text('status').notNull().default('pending'), // 'pending', 'processing', 'completed', 'failed'
+  targetGasPrice: text('target_gas_price'), // execute when gas price drops to this level
+  maxExecutionTime: timestamp('max_execution_time'), // deadline for execution
+  executedAt: timestamp('executed_at'),
+  executionTxHash: text('execution_tx_hash'),
+  gasSaved: text('gas_saved'), // amount of gas saved by batching
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index("idx_batched_transactions_user_id").on(table.userId),
+  index("idx_batched_transactions_status").on(table.status),
+  index("idx_batched_transactions_batch_id").on(table.batchId),
+]);
+
+export const gasOptimizationHistory = pgTable('gas_optimization_history', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  swapId: text('swap_id').references(() => swapHistory.sideshiftOrderId),
+  originalGasEstimate: text('original_gas_estimate').notNull(),
+  optimizedGasEstimate: text('optimized_gas_estimate').notNull(),
+  gasTokenUsed: text('gas_token_used').references(() => gasTokens.symbol),
+  gasSaved: text('gas_saved').notNull(),
+  savingsPercent: real('savings_percent').notNull(),
+  optimizationType: text('optimization_type').notNull(), // 'token_discount', 'batching', 'timing', 'combined'
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_gas_optimization_history_user_id").on(table.userId),
+  index("idx_gas_optimization_history_swap_id").on(table.swapId),
+]);
+
+=======
+>>>>>>> main
 
 // --- GAS FEE OPTIMIZATION SCHEMAS ---
 
