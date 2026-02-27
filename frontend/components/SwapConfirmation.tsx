@@ -5,17 +5,15 @@ import { parseEther, formatEther, type Chain } from 'viem'
 import { mainnet, polygon, arbitrum, avalanche, optimism, bsc, base } from 'wagmi/chains'
 import { SIDESHIFT_CONFIG } from '../../shared/config/sideshift'
 
-// --- Interface and Constants ---
-interface QuoteData {
+export interface QuoteData {
   depositAmount: string;
   depositCoin: string;
   depositNetwork: string;
-  depositAddress: string;
   rate: string;
   settleAmount: string;
   settleCoin: string;
   settleNetwork: string;
-  depositAddress?: string;
+  depositAddress?: string; // Keep only the optional version
   memo?: string;
   expiry?: string;
   id?: string;
