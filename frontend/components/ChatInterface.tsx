@@ -34,10 +34,10 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  type?: 'message' | 'intent_confirmation' | 'swap_confirmation' | 'yield_info' | 'checkout_link';
-  data?: {
-    parsedCommand?: ParsedCommand;
-    quoteData?: QuoteData;
+  type?: 'message' | 'intent_confirmation' | 'swap_confirmation' | 'yield_info' | 'checkout_link' | 'portfolio_summary';
+  data?: { 
+    parsedCommand?: ParsedCommand; 
+    quoteData?: QuoteData; 
     confidence?: number;
     url?: string;
     portfolioItems?: PortfolioItem[];
@@ -80,7 +80,6 @@ export default function ChatInterface() {
   const [currentConfidence, setCurrentConfidence] = useState<number | undefined>(undefined);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const { address, isConnected } = useAccount();
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { handleError } = useErrorHandler();
@@ -257,7 +256,6 @@ export default function ChatInterface() {
   useEffect(() => {
     if (audioError) {
       addMessage({ role: 'assistant', content: audioError, type: 'message' });
-      inputRef.current?.focus();
     }
   }, [audioError]);
 
@@ -369,7 +367,7 @@ export default function ChatInterface() {
   };
 
   const processCommand = async (text: string) => {
-    if (!isLoading) setIsLoading(true);
+    if(!isLoading) setIsLoading(true); 
 
     try {
       const response = await fetch('/api/parse-command', {
@@ -377,9 +375,9 @@ export default function ChatInterface() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
       });
-
+      
       const command: ParsedCommand = await response.json();
-
+      
       if (!command.success && command.intent !== 'yield_scout') {
         addMessage({
           role: 'assistant',
@@ -399,7 +397,7 @@ export default function ChatInterface() {
         const yieldData = await yieldRes.json();
         addMessage({
           role: 'assistant',
-          content: yieldData.message,
+          content: yieldData.message, 
           type: 'yield_info'
         });
         setIsLoading(false);
@@ -409,39 +407,39 @@ export default function ChatInterface() {
       // Handle Checkout (Payment Links)
       if (command.intent === 'checkout') {
         let finalAddress = command.settleAddress;
-
+        
         if (!finalAddress) {
-          if (!isConnected || !address) {
-            addMessage({
-              role: 'assistant',
-              content: "To create a receive link for yourself, please connect your wallet first.",
-              type: 'message'
-            });
-            setIsLoading(false);
-            return;
-          }
-          finalAddress = address;
+            if (!isConnected || !address) {
+                addMessage({
+                    role: 'assistant',
+                    content: "To create a receive link for yourself, please connect your wallet first.",
+                    type: 'message'
+                });
+                setIsLoading(false);
+                return;
+            }
+            finalAddress = address;
         }
 
         const checkoutRes = await fetch('/api/create-checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            settleAsset: command.settleAsset,
-            settleNetwork: command.settleNetwork,
-            settleAmount: command.settleAmount,
-            settleAddress: finalAddress
-          })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                settleAsset: command.settleAsset,
+                settleNetwork: command.settleNetwork,
+                settleAmount: command.settleAmount,
+                settleAddress: finalAddress 
+            })
         });
         const checkoutData = await checkoutRes.json();
-
+        
         if (checkoutData.error) throw new Error(checkoutData.error);
 
         addMessage({
-          role: 'assistant',
-          content: `Payment Link Created for ${checkoutData.settleAmount} ${checkoutData.settleCoin} on ${command.settleNetwork}`,
-          type: 'checkout_link',
-          data: { url: checkoutData.url }
+            role: 'assistant',
+            content: `Payment Link Created for ${checkoutData.settleAmount} ${checkoutData.settleCoin} on ${command.settleNetwork}`,
+            type: 'checkout_link',
+            data: { url: checkoutData.url }
         });
         setIsLoading(false);
         return;
@@ -510,11 +508,11 @@ export default function ChatInterface() {
       } else {
         await executeSwap(command);
       }
-
+      
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'command_processing',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     } finally {
@@ -543,10 +541,10 @@ export default function ChatInterface() {
           toChain: command.toChain
         }),
       });
-
+      
       const quote = await quoteResponse.json();
       if (quote.error) throw new Error(quote.error);
-
+      
       addMessage({
         role: 'assistant',
         content: `Swap Prepared: ${quote.depositAmount} ${quote.depositCoin} → ${quote.settleAmount} ${quote.settleCoin}`,
@@ -554,9 +552,9 @@ export default function ChatInterface() {
         data: { quoteData: quote, confidence: command.confidence }
       });
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'swap_quote',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     }
@@ -579,19 +577,19 @@ export default function ChatInterface() {
           settleAddress: address // Use connected wallet address
         }),
       });
-
+      
       const result = await dcaResponse.json();
       if (result.error) throw new Error(result.error);
-
+      
       addMessage({
         role: 'assistant',
         content: `✅ DCA Schedule Created!\n\n📊 Details:\n• ${command.amount} ${command.fromAsset} → ${command.toAsset}\n• Frequency: ${command.frequency}\n${command.dayOfWeek ? `• Day: ${command.dayOfWeek}` : ''}\n${command.dayOfMonth ? `• Date: ${command.dayOfMonth}` : ''}\n\nYour recurring swap is now active!`,
         type: 'message'
       });
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'dca_creation',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     }
@@ -614,10 +612,10 @@ export default function ChatInterface() {
           settleAddress: address // Use connected wallet address
         }),
       });
-
+      
       const result = await limitOrderResponse.json();
       if (result.error) throw new Error(result.error);
-
+      
       const operatorText = command.conditionOperator === 'gt' ? 'above' : 'below';
       addMessage({
         role: 'assistant',
@@ -625,9 +623,9 @@ export default function ChatInterface() {
         type: 'message'
       });
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'limit_order_creation',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     }
@@ -665,16 +663,8 @@ export default function ChatInterface() {
         } else {
             await executeSwap(pendingCommand);
         }
-      } else if (pendingCommand.intent === 'dca') {
-        await executeDCA(pendingCommand);
-      } else if (pendingCommand.conditionOperator && pendingCommand.conditionValue) {
-        // Limit Order (swap with conditions)
-        await executeLimitOrder(pendingCommand);
-      } else {
-        await executeSwap(pendingCommand);
-      }
     } else if (!confirmed) {
-      addMessage({ role: 'assistant', content: 'Cancelled.', type: 'message' });
+        addMessage({ role: 'assistant', content: 'Cancelled.', type: 'message' });
     }
     setPendingCommand(null);
   };
@@ -721,7 +711,7 @@ export default function ChatInterface() {
 
 return (
     <div className="flex flex-col h-[700px] bg-[#0B0E11] border border-white/10 rounded-3xl overflow-hidden shadow-2xl relative">
-
+      
       {/* 1. Header / Status Bar */}
       <div className="px-6 py-4 bg-white/[0.02] border-b border-white/5 flex justify-between items-center backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -744,13 +734,13 @@ return (
         {messages.map((msg, index) => (
           <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
             <div className={`max-w-[85%] ${msg.role === 'user' ? 'order-1' : 'order-2'}`}>
-
+              
               {msg.role === 'user' ? (
                 <div className="bg-blue-600 text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-lg shadow-blue-600/20 text-sm font-medium">
                   {msg.content}
                 </div>
               ) : (
-
+                
                 <div className="space-y-3">
                   <div className="bg-white/[0.04] border border-white/10 text-gray-200 px-5 py-4 rounded-2xl rounded-tl-none text-sm leading-relaxed backdrop-blur-sm">
                     {msg.type === 'message' && <div className="whitespace-pre-line">{msg.content}</div>}
@@ -766,7 +756,7 @@ return (
                         </div>
                     )}
                     {msg.type === 'yield_info' && <div className="font-mono text-xs text-blue-300">{msg.content}</div>}
-
+                    
                     {/* Inject your Custom Components (SwapConfirmation etc) here */}
                     {msg.type === 'intent_confirmation' && <IntentConfirmation command={msg.data?.parsedCommand} onConfirm={handleIntentConfirm} />}
                     {msg.type === 'swap_confirmation' && msg.data?.quoteData && (
@@ -816,7 +806,7 @@ return (
                   </div>
                 </div>
               )}
-
+              
               <p className={`text-[10px] text-gray-500 mt-2 px-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                 {formatTime(msg.timestamp)}
               </p>
@@ -831,26 +821,20 @@ return (
         <div className="relative group transition-all duration-300">
           {/* Subtle glow effect on focus */}
           <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500" />
-
+          
           <div className="relative flex items-center gap-3 bg-[#161A1E] border border-white/10 p-2 rounded-2xl group-focus-within:border-blue-500/50 transition-all">
-            <button
-              onClick={() => {
-                if (isRecording) {
-                  handleStopRecording();
-                } else {
-                  handleStartRecording();
-                }
-              }}
+            <button 
+              onClick={handleVoiceRecording}
               disabled={!isAudioSupported}
-              className={`p-3 rounded-xl transition-all ${!isAudioSupported ? 'bg-white/5 text-gray-600 cursor-not-allowed' :
+              className={`p-3 rounded-xl transition-all ${
+                !isAudioSupported ? 'bg-white/5 text-gray-600 cursor-not-allowed' :
                 isRecording ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
+              }`}
             >
               {isRecording ? <StopCircle className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
-
+            
             <input
-              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -858,10 +842,10 @@ return (
               placeholder="Send a command (e.g., 'Swap 1 ETH to USDC')"
               className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-white placeholder:text-gray-500 py-3"
             />
-
+            
             <div className="flex items-center gap-2 pr-2">
-              <button
-                onClick={handleSend}
+              <button 
+                onClick={handleSend} 
                 disabled={isLoading || !input.trim()}
                 className="p-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-20 text-white rounded-xl transition-all shadow-lg shadow-blue-600/20"
               >
@@ -870,6 +854,13 @@ return (
             </div>
           </div>
         </div>
+        
+        {/* Voice Fallback */}
+        {!isAudioSupported && (
+            <div className="text-red-500 text-xs mt-2 px-1 text-center font-medium">
+                🎤 Voice input is not supported in your browser. Please use Chrome or type your command.
+            </div>
+        )}
 
         {/* Footer Warning */}
         {!isConnected && (
