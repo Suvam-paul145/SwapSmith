@@ -4,6 +4,9 @@ import logger from './logger';
 import type { ParsedCommand } from './parseUserCommand';
 
 interface PortfolioExecutionResult {
+  success: any;
+  orderIds: any;
+  error: string;
   successfulOrders: Array<{
     order: any;
     allocation: any;
@@ -24,14 +27,14 @@ interface QuoteOrderPair {
 }
 
 export async function executePortfolioStrategy(
+<<<<<<< HEAD
+userId: number, parsedCommand: any, fromChain: any, amount: any, portfolio: any, settleAddress: any, bot: Telegraf<Context<Update>>): Promise<PortfolioExecutionResult> {
+=======
   userId: number,
   parsedCommand: ParsedCommand
-): Promise<PortfolioExecutionResult> {
-  const { fromAsset, fromChain, amount, portfolio, settleAddress } = parsedCommand;
 
   if (!portfolio || portfolio.length === 0) {
     throw new Error('No portfolio allocation found');
-  }
 
   const quotesAndOrders: QuoteOrderPair[] = [];
   let remainingAmount = amount!;

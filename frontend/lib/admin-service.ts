@@ -6,6 +6,7 @@ import {
   adminRequests,
   swapHistory,
   users,
+  userSettings,
   type AdminUser,
   type AdminRequest,
 } from '../../shared/schema';
@@ -205,4 +206,234 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
     recentSwaps: recentSwapsRows,
     swapsByDay: swapsByDayRows.map(r => ({ date: r.date, count: r.cnt })),
   };
+}
+
+// ── Admin User Management ─────────────────────────────────────────────────
+
+export interface AdminUserRow {
+  id: number;
+  firebaseUid: string | null;
+  walletAddress: string | null;
+  email: string | null;
+  plan: string;
+  totalPoints: number;
+  createdAt: string | null;
+  swapCount: number;
+  suspended: boolean;
+  flagged: boolean;
+  suspendedBy: string | null;
+  suspendedAt: string | null;
+  suspendReason: string | null;
+  flaggedBy: string | null;
+  flaggedAt: string | null;
+  flagReason: string | null;
+}
+
+export async function getAdminUsersList(
+  page: number,
+  limit: number,
+  search?: string,
+): Promise<{ rows: AdminUserRow[]; total: number }> {
+  const offset = (page - 1) * limit;
+
+  let totalResult: { total: number }[];
+  let rowsResult: {
+    id: number;
+    firebase_uid: string | null;
+    wallet_address: string | null;
+    plan: string;
+    total_points: number;
+    created_at: string | null;
+    swap_count: number;
+    preferences: string | null;
+  }[];
+
+  if (search) {
+    const pattern = `%${search}%`;
+    totalResult = (await rawSql`
+      SELECT count(*)::int AS total FROM users u
+      WHERE u.wallet_address ILIKE ${pattern}
+         OR u.firebase_uid   ILIKE ${pattern}
+    `) as { total: number }[];
+    rowsResult = (await rawSql`
+      SELECT
+        u.id,
+        u.firebase_uid,
+        u.wallet_address,
+        u.plan,
+        u.total_points,
+        u.created_at,
+        COALESCE(sc.cnt, 0)::int AS swap_count,
+        us.preferences
+      FROM users u
+      LEFT JOIN (
+        SELECT user_id, count(*)::int AS cnt FROM swap_history GROUP BY user_id
+      ) sc ON sc.user_id = u.firebase_uid
+      LEFT JOIN user_settings us ON us.user_id = u.firebase_uid
+      WHERE u.wallet_address ILIKE ${pattern}
+         OR u.firebase_uid   ILIKE ${pattern}
+      ORDER BY u.created_at DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `) as {
+      id: number;
+      firebase_uid: string | null;
+      wallet_address: string | null;
+      plan: string;
+      total_points: number;
+      created_at: string | null;
+      swap_count: number;
+      preferences: string | null;
+    }[];
+  } else {
+    totalResult = (await rawSql`SELECT count(*)::int AS total FROM users`) as { total: number }[];
+    rowsResult = (await rawSql`
+      SELECT
+        u.id,
+        u.firebase_uid,
+        u.wallet_address,
+        u.plan,
+        u.total_points,
+        u.created_at,
+        COALESCE(sc.cnt, 0)::int AS swap_count,
+        us.preferences
+      FROM users u
+      LEFT JOIN (
+        SELECT user_id, count(*)::int AS cnt FROM swap_history GROUP BY user_id
+      ) sc ON sc.user_id = u.firebase_uid
+      LEFT JOIN user_settings us ON us.user_id = u.firebase_uid
+      ORDER BY u.created_at DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `) as {
+      id: number;
+      firebase_uid: string | null;
+      wallet_address: string | null;
+      plan: string;
+      total_points: number;
+      created_at: string | null;
+      swap_count: number;
+      preferences: string | null;
+    }[];
+  }
+
+  const rows: AdminUserRow[] = rowsResult.map((r) => {
+    let prefs: Record<string, unknown> = {};
+    try { prefs = r.preferences ? JSON.parse(r.preferences) : {}; } catch {}
+    const s = (prefs.adminStatus ?? {}) as {
+      suspended?: boolean;
+      flagged?: boolean;
+      suspendedBy?: string | null;
+      suspendedAt?: string | null;
+      suspendReason?: string | null;
+      flaggedBy?: string | null;
+      flaggedAt?: string | null;
+      flagReason?: string | null;
+    };
+    return {
+      id:           r.id,
+      firebaseUid:  r.firebase_uid,
+      walletAddress: r.wallet_address,
+      plan:         r.plan ?? 'free',
+      totalPoints:  r.total_points ?? 0,
+      createdAt:    r.created_at ? new Date(r.created_at).toISOString() : null,
+      swapCount:    r.swap_count ?? 0,
+      suspended:    s.suspended ?? false,
+      flagged:      s.flagged ?? false,
+      suspendedBy:  s.suspendedBy ?? null,
+      suspendedAt:  s.suspendedAt ?? null,
+      suspendReason: s.suspendReason ?? null,
+      flaggedBy:    s.flaggedBy ?? null,
+      flaggedAt:    s.flaggedAt ?? null,
+      flagReason:   s.flagReason ?? null,
+      email:        null, // enriched by API layer via Firebase Admin
+    };
+  });
+
+  return { rows, total: totalResult[0]?.total ?? 0 };
+}
+
+/** Get swap history for a specific user (admin context) */
+export async function getUserSwapsForAdmin(userId: string, limit = 50) {
+  return db
+    .select()
+    .from(swapHistory)
+    .where(eq(swapHistory.userId, userId))
+    .orderBy(desc(swapHistory.createdAt))
+    .limit(limit);
+}
+
+/** Suspend / unsuspend / flag / unflag a user.
+ *  Stored in userSettings.preferences under adminStatus key.
+ */
+export async function updateUserAdminStatus(
+  firebaseUid: string,
+  action: 'suspend' | 'unsuspend' | 'flag' | 'unflag',
+  adminEmail: string,
+  reason?: string,
+): Promise<void> {
+  // Fetch existing preferences
+  const existing = await db
+    .select({ preferences: userSettings.preferences })
+    .from(userSettings)
+    .where(eq(userSettings.userId, firebaseUid))
+    .limit(1);
+
+  let prefs: Record<string, unknown> = {};
+  if (existing[0]?.preferences) {
+    try { prefs = JSON.parse(existing[0].preferences); } catch {}
+  }
+
+  const adminStatus: {
+    suspended?: boolean;
+    flagged?: boolean;
+    suspendedBy?: string | null;
+    suspendedAt?: string | null;
+    suspendReason?: string | null;
+    flaggedBy?: string | null;
+    flaggedAt?: string | null;
+    flagReason?: string | null;
+  } = (prefs.adminStatus ?? {});
+  const now = new Date().toISOString();
+
+  switch (action) {
+    case 'suspend':
+      adminStatus.suspended    = true;
+      adminStatus.suspendedBy  = adminEmail;
+      adminStatus.suspendedAt  = now;
+      adminStatus.suspendReason = reason ?? null;
+      break;
+    case 'unsuspend':
+      adminStatus.suspended    = false;
+      adminStatus.suspendedBy  = null;
+      adminStatus.suspendedAt  = null;
+      adminStatus.suspendReason = null;
+      break;
+    case 'flag':
+      adminStatus.flagged    = true;
+      adminStatus.flaggedBy  = adminEmail;
+      adminStatus.flaggedAt  = now;
+      adminStatus.flagReason = reason ?? null;
+      break;
+    case 'unflag':
+      adminStatus.flagged    = false;
+      adminStatus.flaggedBy  = null;
+      adminStatus.flaggedAt  = null;
+      adminStatus.flagReason = null;
+      break;
+  }
+
+  prefs.adminStatus = adminStatus;
+  const prefsStr = JSON.stringify(prefs);
+
+  if (existing.length > 0) {
+    await db.update(userSettings).set({
+      preferences: prefsStr,
+      updatedAt: new Date(),
+    }).where(eq(userSettings.userId, firebaseUid));
+  } else {
+    await db.insert(userSettings).values({
+      userId:     firebaseUid,
+      preferences: prefsStr,
+      updatedAt:  new Date(),
+    });
+  }
 }
