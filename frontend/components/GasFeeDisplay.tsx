@@ -18,6 +18,7 @@ interface GasEstimate {
   expiresAt?: Date;
 }
 
+
 interface GasPrediction {
   predictedPrice: string;
   confidence: number;

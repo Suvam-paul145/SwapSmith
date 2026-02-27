@@ -15,7 +15,7 @@ export interface UseAudioRecorderReturn {
   isRecording: boolean;
   isSupported: boolean;
   startRecording: () => Promise<void>;
-  stopRecording: () => Promise<Blob | null>;
+  stopRecording: () => Promise<Blob | string | null>;
   error: string | null;
   browserInfo: {
     browser: string;
@@ -422,7 +422,7 @@ export const useAudioRecorder = (config: AudioRecorderConfig = {}): UseAudioReco
     }
   }, [isSupported, isRecording, config]);
 
-  const stopRecording = useCallback(async (): Promise<Blob | null> => {
+  const stopRecording = useCallback(async (): Promise<Blob | string | null> => {
     if (!isRecording || !polyfillRef.current) {
       return null;
     }
