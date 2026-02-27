@@ -482,3 +482,46 @@ export const planPurchasesRelations = relations(planPurchases, ({one}) => ({
     references: [users.id],
   }),
 }));
+
+// --- ADMIN SCHEMAS ---
+
+export const adminRoleType = pgEnum('admin_role', ['super_admin', 'admin', 'moderator']);
+export const adminRequestStatus = pgEnum('admin_request_status', ['pending', 'approved', 'rejected']);
+
+export const adminUsers = pgTable('admin_users', {
+  id: serial('id').primaryKey(),
+  firebaseUid: text('firebase_uid').notNull().unique(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  role: adminRoleType('role').notNull().default('admin'),
+  isActive: boolean('is_active').notNull().default(true),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: text('approved_by'), // email of approver
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('idx_admin_users_email').on(table.email),
+  index('idx_admin_users_firebase_uid').on(table.firebaseUid),
+]);
+
+export const adminRequests = pgTable('admin_requests', {
+  id: serial('id').primaryKey(),
+  firebaseUid: text('firebase_uid').notNull().unique(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  reason: text('reason').notNull(),
+  status: adminRequestStatus('status').notNull().default('pending'),
+  approvalToken: text('approval_token').notNull().unique(),
+  rejectionReason: text('rejection_reason'),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedBy: text('reviewed_by'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('idx_admin_requests_email').on(table.email),
+  index('idx_admin_requests_status').on(table.status),
+  index('idx_admin_requests_token').on(table.approvalToken),
+]);
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type AdminRequest = typeof adminRequests.$inferSelect;
