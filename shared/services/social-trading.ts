@@ -1,4 +1,4 @@
-import { db } from '../drizzle.config';
+import { db } from '../services/database';
 import { 
   traderStats, 
   followedTraders, 

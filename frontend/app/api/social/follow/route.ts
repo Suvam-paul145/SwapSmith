@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { followTrader, unfollowTrader, isFollowing, getFollowing, getFollowers } from '../../../../shared/services/social-trading';
+import { followTrader, unfollowTrader, isFollowing, getFollowing, getFollowers } from '../../../../../shared/services/social-trading';
 
 export async function GET(request: NextRequest) {
   try {

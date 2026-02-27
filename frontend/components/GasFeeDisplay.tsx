@@ -14,6 +14,8 @@ interface GasEstimate {
   confidence: number;
   source: string;
   formatted?: string;
+  timestamp?: Date;
+  expiresAt?: Date;
 }
 
 interface GasPrediction {
@@ -244,7 +246,9 @@ export default function GasFeeDisplay({
       {/* Refresh indicator */}
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/10">
         <span className="text-xs text-gray-500">
-          Updated {new Date(gasEstimate.timestamp).toLocaleTimeString()}
+          Updated {gasEstimate.timestamp 
+            ? new Date(gasEstimate.timestamp).toLocaleTimeString() 
+            : new Date().toLocaleTimeString()}
         </span>
         <button
           onClick={fetchGasData}

@@ -6,7 +6,7 @@ import {
   getUserPortfolios,
   updatePortfolio,
   deletePortfolio
-} from '../../../../shared/services/social-trading';
+} from '../../../../../shared/services/social-trading';
 
 export async function GET(request: NextRequest) {
   try {

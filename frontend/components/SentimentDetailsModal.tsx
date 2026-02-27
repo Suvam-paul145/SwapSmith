@@ -2,11 +2,16 @@ import React from "react";
 import { MarketSentiment, TradingSignal } from "@/lib/market-sentiment";
 import { getFearGreedEmoji, getFearGreedLabel, getFearGreedColor } from "@/lib/fear-greed";
 
+interface SentimentData {
+  bullish: number;
+  neutral: number;
+  bearish: number;
+}
+
 interface SentimentDetailsModalProps {
   open: boolean;
   onClose: () => void;
-  sentiment: MarketSentiment;
-  signal?: TradingSignal | null;
+  sentiment: SentimentData;
 }
 
 export default function SentimentDetailsModal({ open, onClose, sentiment, signal }: SentimentDetailsModalProps) {
@@ -34,7 +39,7 @@ export default function SentimentDetailsModal({ open, onClose, sentiment, signal
         </button>
         <h2 className="text-xl font-bold mb-2">Market Sentiment Details</h2>
         <div className="mb-4 text-zinc-600 dark:text-zinc-300 text-sm">
-          This sentiment is calculated using CoinGecko's top 50 coins, based on 24h price and volume trends. <br />
+          This sentiment is calculated using CoinGecko&apos;s top 50 coins, based on 24h price and volume trends. <br />
           <a href="https://www.coingecko.com/en" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">View on CoinGecko</a>
         </div>
         
