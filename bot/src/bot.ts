@@ -92,8 +92,9 @@ const orderMonitor = new OrderMonitor({
         parse_mode: 'Markdown',
       });
     } catch (e) {
-      logger.error('Order update notify failed:', e);
+      handleError('OrderUpdateNotifyFailed', e, { from: { id: telegramId } });
     }
+
   },
 });
 
@@ -298,6 +299,7 @@ async function handleTextMessage(
 /* -------------------------------------------------------------------------- */
 
 bot.action(/deposit_(.+)/, async (ctx) => {
+
   const poolId = ctx.match[1];
 
   await ctx.answerCbQuery();
@@ -383,12 +385,17 @@ bot.action('confirm_portfolio', async (ctx) => {
 
   try {
     await ctx.answerCbQuery('Processing...');
-    await executePortfolioStrategy(userId, state.parsedCommand);
+    const result = await executePortfolioStrategy(userId, state.parsedCommand);
 
-    ctx.editMessageText('✅ Portfolio strategy executed successfully!');
+    const summary = result.successfulOrders
+      .map(o => `✅ ${o.allocation.toAsset}: ${o.swapAmount.toFixed(4)} ${fromAsset}`)
+      .join('\n');
+
+    ctx.editMessageText(`✅ Portfolio strategy executed successfully!\n\n${summary}`);
   } catch (error) {
-    logger.error('Portfolio execution error:', error);
-    ctx.editMessageText('❌ Failed to execute portfolio strategy.');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Portfolio execution error:', { userId, error: errorMessage });
+    ctx.editMessageText(`❌ Portfolio execution failed: ${errorMessage}`);
   } finally {
     await db.clearConversationState(userId);
   }
@@ -409,6 +416,7 @@ bot.action('confirm_limit_order', async (ctx) => {
     await db.clearConversationState(userId);
   }
 });
+
 
 bot.action('cancel_swap', async (ctx) => {
   if (!ctx.from) return;
@@ -457,10 +465,7 @@ async function start() {
     process.once('SIGINT', () => shutdown('SIGINT'));
     process.once('SIGTERM', () => shutdown('SIGTERM'));
   } catch (e) {
-    logger.error('Startup failed', e);
-    if (process.env.SENTRY_DSN) {
-      Sentry.captureException(e);
-    }
+    handleError('StartupFailed', e);
     process.exit(1);
   }
 }

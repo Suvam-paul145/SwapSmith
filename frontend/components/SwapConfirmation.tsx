@@ -5,8 +5,7 @@ import { parseEther, formatEther, type Chain, formatUnits, parseUnits } from 'vi
 import { mainnet, polygon, arbitrum, avalanche, optimism, bsc, base } from 'wagmi/chains'
 import { getCoins } from '../utils/sideshift-client'
 
-// --- Interface and Constants ---
-interface QuoteData {
+export interface QuoteData {
   depositAmount: string;
   depositCoin: string;
   depositNetwork: string;
@@ -14,6 +13,7 @@ interface QuoteData {
   settleAmount: string;
   settleCoin: string;
   settleNetwork: string;
+  depositAddress?: string; // Keep only the optional version
   memo?: string;
   expiry?: string;
   id?: string;
@@ -161,8 +161,18 @@ export default function SwapConfirmation({ quote, confidence = 100, onAmountChan
       return;
     }
 
+    // Log quote for debugging to verify depositAddress exists
+    console.log("Swap quote:", quote);
+    
+    // Validate depositAddress before proceeding
+    if (!quote.depositAddress) {
+      console.error("depositAddress is missing from quote:", quote);
+      alert("Error: Deposit address is missing. Cannot proceed with swap.");
+      return;
+    }
+    
     const transactionDetails = {
-      to: address, // Note: Ideally this should be the SideShift deposit address generated from an Order
+      to: quote.depositAddress as `0x${string}`, // SideShift deposit address
       value: parseEther(quote.depositAmount),
       chainId: depositChainId,
     };
