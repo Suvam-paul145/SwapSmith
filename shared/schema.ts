@@ -483,56 +483,45 @@ export const planPurchasesRelations = relations(planPurchases, ({one}) => ({
   }),
 }));
 
-// --- PORTFOLIO REBALANCING SCHEMAS ---
+// --- ADMIN SCHEMAS ---
 
-export const portfolioTargets = pgTable('portfolio_targets', {
+export const adminRoleType = pgEnum('admin_role', ['super_admin', 'admin', 'moderator']);
+export const adminRequestStatus = pgEnum('admin_request_status', ['pending', 'approved', 'rejected']);
+
+export const adminUsers = pgTable('admin_users', {
   id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  telegramId: bigint('telegram_id', { mode: 'number' }),
-  name: text('name').notNull(), // e.g., "Conservative", "Balanced", "Aggressive"
-  assets: jsonb('assets').notNull(), // Array of { coin, network, targetPercentage }
-  driftThreshold: real('drift_threshold').notNull().default(5.0), // Default 5% drift threshold
+  firebaseUid: text('firebase_uid').notNull().unique(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  role: adminRoleType('role').notNull().default('admin'),
   isActive: boolean('is_active').notNull().default(true),
-  autoRebalance: boolean('auto_rebalance').notNull().default(false), // Auto rebalance when threshold exceeded
-  lastRebalancedAt: timestamp('last_rebalanced_at'),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: text('approved_by'), // email of approver
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
-  index("idx_portfolio_targets_user_id").on(table.userId),
-  index("idx_portfolio_targets_telegram_id").on(table.telegramId),
-  index("idx_portfolio_targets_is_active").on(table.isActive),
+  index('idx_admin_users_email').on(table.email),
+  index('idx_admin_users_firebase_uid').on(table.firebaseUid),
 ]);
 
-export const rebalanceHistory = pgTable('rebalance_history', {
+export const adminRequests = pgTable('admin_requests', {
   id: serial('id').primaryKey(),
-  portfolioTargetId: integer('portfolio_target_id').notNull().references(() => portfolioTargets.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull(),
-  telegramId: bigint('telegram_id', { mode: 'number' }),
-  triggerType: text('trigger_type').notNull(), // 'manual' | 'auto' | 'threshold'
-  totalPortfolioValue: numeric('total_portfolio_value', { precision: 20, scale: 8 }).notNull(),
-  swapsExecuted: jsonb('swaps_executed').notNull(), // Array of { fromAsset, toAsset, fromAmount, toAmount, sideshiftOrderId }
-  totalFees: numeric('total_fees', { precision: 20, scale: 8 }).notNull().default('0'),
-  status: text('status').notNull().default('pending'), // 'pending' | 'completed' | 'failed' | 'partial'
-  errorMessage: text('error_message'),
-  startedAt: timestamp('started_at').defaultNow(),
-  completedAt: timestamp('completed_at'),
+  firebaseUid: text('firebase_uid').notNull().unique(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  reason: text('reason').notNull(),
+  status: adminRequestStatus('status').notNull().default('pending'),
+  approvalToken: text('approval_token').notNull().unique(),
+  rejectionReason: text('rejection_reason'),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedBy: text('reviewed_by'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
-  index("idx_rebalance_history_user_id").on(table.userId),
-  index("idx_rebalance_history_portfolio_target_id").on(table.portfolioTargetId),
-  index("idx_rebalance_history_status").on(table.status),
-  index("idx_rebalance_history_created_at").on(table.createdAt),
+  index('idx_admin_requests_email').on(table.email),
+  index('idx_admin_requests_status').on(table.status),
+  index('idx_admin_requests_token').on(table.approvalToken),
 ]);
 
-// --- RELATIONS ---
-
-export const portfolioTargetsRelations = relations(portfolioTargets, ({many}) => ({
-  rebalanceHistory: many(rebalanceHistory),
-}));
-
-export const rebalanceHistoryRelations = relations(rebalanceHistory, ({one}) => ({
-  portfolioTarget: one(portfolioTargets, {
-    fields: [rebalanceHistory.portfolioTargetId],
-    references: [portfolioTargets.id],
-  }),
-}));
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type AdminRequest = typeof adminRequests.$inferSelect;
