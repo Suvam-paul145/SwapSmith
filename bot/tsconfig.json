@@ -16,6 +16,7 @@
       "drizzle-orm": ["./node_modules/drizzle-orm"],
       "drizzle-orm/*": ["./node_modules/drizzle-orm/*"],
       "winston": ["./node_modules/winston"],
+      "axios": ["./node_modules/axios"],
     },
   },
   "include": ["src/**/*", "../shared/schema.ts"],
