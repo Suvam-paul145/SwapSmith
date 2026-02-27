@@ -445,7 +445,6 @@ export default function TerminalPage() {
   /* Render                                   */
   /* ------------------------------------------------------------------------ */
 
-
   return (
     <>
       <Navbar />
