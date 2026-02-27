@@ -116,7 +116,6 @@ const LiveStatsCard = () => {
 /* -------------------------------------------------------------------------- */
 
 export default function TerminalPage() {
-  const router = useRouter();
   const { address, isConnected } = useAccount();
   const { handleError } = useErrorHandler();
 
@@ -222,7 +221,9 @@ export default function TerminalPage() {
     try {
       const audioBlob = await stopRecording();
       if (audioBlob) {
-        const audioFile = new File([audioBlob], "voice_command.wav", { type: audioBlob.type || 'audio/wav' });
+        // Safely determine the type depending on whether it's a Blob or a string
+        const mimeType = audioBlob instanceof Blob ? (audioBlob.type || 'audio/wav') : 'audio/wav';
+        const audioFile = new File([audioBlob], "voice_command.wav", { type: mimeType });
 
         const formData = new FormData();
         formData.append("file", audioFile);

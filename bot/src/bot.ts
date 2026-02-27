@@ -1,4 +1,4 @@
-import { Telegraf, Markup, Context } from 'telegraf';
+import { Telegraf, Markup, Context, Update } from 'telegraf';
 import { message } from 'telegraf/filters';
 import rateLimit from 'telegraf-ratelimit';
 import dotenv from 'dotenv';
@@ -122,6 +122,17 @@ bot.command('yield', async (ctx) => {
   }
 });
 
+bot.command('market', async (ctx) => {
+  await ctx.reply('📊 Fetching market intelligence...');
+  try {
+    const marketData = await getMarketData();
+    const message = formatMarketMessage(marketData);
+    ctx.replyWithMarkdown(message);
+  } catch {
+    ctx.reply('❌ Failed to fetch market data.');
+  }
+});
+
 
 bot.command('clear', async (ctx) => {
   if (ctx.from) {
@@ -177,7 +188,7 @@ bot.on(message('voice'), async (ctx) => {
 /* -------------------------------------------------------------------------- */
 
 async function handleTextMessage(
-  ctx: Context,
+  ctx: Context<Update>,
   text: string,
   inputType: 'text' | 'voice' = 'text'
 ) {
@@ -414,28 +425,17 @@ bot.action('confirm_portfolio', async (ctx) => {
   }
 
   try {
-    await ctx.answerCbQuery('Processing...');
-    const result = await executePortfolioStrategy(userId, state.parsedCommand);
+  if (parsed.intent === 'limit_order') {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply('Please provide the destination wallet address.');
+    }
 
-    const summary = result.successfulOrders
-      .map(o => `✅ ${o.allocation.toAsset}: ${o.swapAmount.toFixed(4)} ${fromAsset}`)
-      .join('\n');
-
-    ctx.editMessageText(`✅ Portfolio strategy executed successfully!\n\n${summary}`);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Portfolio execution error:', { userId, error: errorMessage });
-    ctx.editMessageText(`❌ Portfolio execution failed: ${errorMessage}`);
+    handleError('PortfolioExecutionFailed', error, ctx);
   } finally {
     await db.clearConversationState(userId);
-  }
-});
 
-bot.action('confirm_trailing_stop', async (ctx) => {
-  const userId = ctx.from.id;
-  const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'trailing_stop') {
-    return ctx.answerCbQuery('Session expired.');
   }
 
   const { fromAsset, toAsset, amount, trailingPercentage, settleAddress } = state.parsedCommand;
