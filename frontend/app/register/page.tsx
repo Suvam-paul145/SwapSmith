@@ -1,7 +1,8 @@
 ﻿'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { Eye, EyeOff, Zap, User, Mail, Lock, Check, AlertCircle, Loader2, ShieldCheck, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, User, Mail, Lock, Check, AlertCircle, Loader2, ShieldCheck, ArrowRight } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import AuroraBackground from '@/components/AuroraBackground'
@@ -103,8 +104,8 @@ export default function RegisterPage() {
 
           {/* Logo */}
           <div className="animate-element animate-delay-100 flex items-center gap-2.5 mb-1">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.22)' }}>
-              <Zap className="w-4 h-4" style={{ color: '#60a5fa' }} fill="currentColor" />
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden">
+              <Image src="/swapsmithicon.png" alt="SwapSmith" width={36} height={36} />
             </div>
             <span className="font-bold text-base tracking-tight" style={{ color: '#fff' }}>SwapSmith</span>
           </div>

@@ -1,4 +1,4 @@
-import { Telegraf, Markup, Context } from 'telegraf';
+import { Telegraf, Markup, Context, Update } from 'telegraf';
 import { message } from 'telegraf/filters';
 import rateLimit from 'telegraf-ratelimit';
 import dotenv from 'dotenv';
@@ -9,13 +9,24 @@ import axios from 'axios';
 import { spawn } from 'child_process';
 import express from 'express';
 import { sql } from 'drizzle-orm';
-import { transcribeAudio, ParsedCommand } from './services/groq-client';
+
+import { transcribeAudio } from './services/groq-client';
 import logger, { Sentry } from './services/logger';
-import { getOrderStatus, createOrder, createCheckout } from './services/sideshift-client';
-import { getTopStablecoinYields, formatYieldPools } from './services/yield-client';
+import {
+  getOrderStatus,
+  createOrder,
+  createCheckout,
+} from './services/sideshift-client';
+import {
+  getTopStablecoinYields,
+  formatYieldPools,
+} from './services/yield-client';
 import * as db from './services/database';
 import { DCAScheduler } from './services/dca-scheduler';
-import { resolveAddress, isNamingService } from './services/address-resolver';
+import {
+  resolveAddress,
+  isNamingService,
+} from './services/address-resolver';
 import { limitOrderWorker } from './workers/limitOrderWorker';
 import { trailingStopWorker } from './workers/trailing-stop';
 import { OrderMonitor } from './services/order-monitor';
@@ -36,19 +47,22 @@ const PORT = Number(process.env.PORT || 3000);
 
 const bot = new Telegraf(BOT_TOKEN);
 
-// Configure rate limiting middleware
+/* -------------------------------------------------------------------------- */
+/* RATE LIMITING                                                              */
+/* -------------------------------------------------------------------------- */
+
 const limit = rateLimit({
   window: 60000,
   limit: 20,
-  keyGenerator: (ctx: Context) => {
-    return ctx.from?.id.toString() || 'unknown';
-  },
+  keyGenerator: (ctx: Context) =>
+    ctx.from?.id.toString() || 'unknown',
   onLimitExceeded: async (ctx: Context) => {
-    await ctx.reply('⚠️ Too many requests! Please slow down. Rate limit: 20 messages per minute.');
+    await ctx.reply(
+      '⚠️ Too many requests! Please slow down (20/min).'
+    );
   },
 });
 
-// Apply rate limiting middleware
 bot.use(limit);
 
 const app = express();
@@ -62,7 +76,13 @@ const orderMonitor = new OrderMonitor({
   getOrderStatus,
   updateOrderStatus: db.updateOrderStatus,
   getPendingOrders: db.getPendingOrders,
-  onStatusChange: async (telegramId, orderId, oldStatus, newStatus, details) => {
+  onStatusChange: async (
+    telegramId,
+    orderId,
+    oldStatus,
+    newStatus,
+    details
+  ) => {
     const emojiMap: Record<string, string> = {
       waiting: '⏳',
       pending: '⏳',
@@ -95,7 +115,6 @@ const orderMonitor = new OrderMonitor({
     } catch (e) {
       logger.error('OrderUpdateNotifyFailed', e);
     }
-
   },
 });
 
@@ -104,30 +123,35 @@ const orderMonitor = new OrderMonitor({
 /* -------------------------------------------------------------------------- */
 
 bot.start((ctx) =>
-  ctx.reply(`🤖 *Welcome to SwapSmith!*\n\nVoice-enabled crypto trading assistant.`, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      Markup.button.url('🌐 Open Web App', MINI_APP_URL),
-    ]),
-  })
+  ctx.reply(
+    `🤖 *Welcome to SwapSmith!*\n\nVoice-enabled crypto trading assistant.`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        Markup.button.url('🌐 Open Web App', MINI_APP_URL),
+      ]),
+    }
+  )
 );
 
 bot.command('yield', async (ctx) => {
   await ctx.reply('📈 Fetching top yield opportunities...');
   try {
     const yields = await getTopStablecoinYields();
-    ctx.replyWithMarkdown(`📈 *Top Stablecoin Yields:*\n\n${formatYieldPools(yields)}`);
+    ctx.replyWithMarkdown(
+      `📈 *Top Stablecoin Yields:*\n\n${formatYieldPools(
+        yields
+      )}`
+    );
   } catch {
     ctx.reply('❌ Failed to fetch yields.');
   }
 });
 
-
 bot.command('clear', async (ctx) => {
-  if (ctx.from) {
-    await db.clearConversationState(ctx.from.id);
-    ctx.reply('🗑️ Conversation cleared');
-  }
+  if (!ctx.from) return;
+  await db.clearConversationState(ctx.from.id);
+  ctx.reply('🗑️ Conversation cleared');
 });
 
 /* -------------------------------------------------------------------------- */
@@ -149,18 +173,20 @@ bot.on(message('voice'), async (ctx) => {
   const mp3 = oga.replace('.oga', '.mp3');
 
   try {
-    const res = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
+    const res = await axios.get(fileLink.href, {
+      responseType: 'arraybuffer',
+    });
     fs.writeFileSync(oga, res.data);
 
     await new Promise<void>((resolve, reject) => {
       const ffmpeg = spawn('ffmpeg', ['-i', oga, mp3, '-y']);
-      ffmpeg.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`FFmpeg exited with code ${code}`));
-        }
-      });
+      ffmpeg.on('close', (code) =>
+        code === 0
+          ? resolve()
+          : reject(
+              new Error(`FFmpeg exited with ${code}`)
+            )
+      );
       ffmpeg.on('error', reject);
     });
 
@@ -177,7 +203,7 @@ bot.on(message('voice'), async (ctx) => {
 /* -------------------------------------------------------------------------- */
 
 async function handleTextMessage(
-  ctx: Context,
+  ctx: Context<Update>,
   text: string,
   inputType: 'text' | 'voice' = 'text'
 ) {
@@ -195,23 +221,39 @@ async function handleTextMessage(
       state.parsedCommand.intent
     )
   ) {
-    const resolved = await resolveAddress(userId, text.trim());
+    const resolved = await resolveAddress(
+      userId,
+      text.trim()
+    );
+
     const targetChain =
       state.parsedCommand.toChain ||
       state.parsedCommand.settleNetwork ||
       state.parsedCommand.fromChain ||
       'ethereum';
 
-    if (resolved.address && isValidAddress(resolved.address, targetChain)) {
-      const updated = { ...state.parsedCommand, settleAddress: resolved.address };
-      await db.setConversationState(userId, { parsedCommand: updated });
+    if (
+      resolved.address &&
+      isValidAddress(resolved.address, targetChain)
+    ) {
+      const updated = {
+        ...state.parsedCommand,
+        settleAddress: resolved.address,
+      };
+
+      await db.setConversationState(userId, {
+        parsedCommand: updated,
+      });
 
       return ctx.reply(
         `✅ Address resolved:\n\`${resolved.originalInput}\` → \`${resolved.address}\``,
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
-            Markup.button.callback('✅ Yes', `confirm_${updated.intent}`),
+            Markup.button.callback(
+              '✅ Yes',
+              `confirm_${updated.intent}`
+            ),
             Markup.button.callback('❌ No', 'cancel_swap'),
           ]),
         }
@@ -220,7 +262,7 @@ async function handleTextMessage(
 
     if (isNamingService(text)) {
       return ctx.reply(
-        `❌ Could not resolve \`${text}\`. Please try a raw address.`,
+        `❌ Could not resolve \`${text}\`. Please use a raw address.`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -228,11 +270,16 @@ async function handleTextMessage(
 
   /* ---------------- NLP Parsing ---------------- */
 
-  const parsed = await parseUserCommand(text, state?.messages || [], inputType);
+  const parsed = await parseUserCommand(
+    text,
+    state?.messages || [],
+    inputType
+  );
+
   if (!parsed.success) {
     return ctx.replyWithMarkdown(
       (parsed as any).validationErrors?.join('\n') ||
-        '❌ I didn\'t understand.'
+        '❌ I didn’t understand.'
     );
   }
 
@@ -241,14 +288,18 @@ async function handleTextMessage(
   if (parsed.intent === 'yield_scout') {
     const yields = await getTopStablecoinYields();
     return ctx.replyWithMarkdown(
-      `📈 *Top Stablecoin Yields:*\n\n${formatYieldPools(yields)}`
+      `📈 *Top Stablecoin Yields:*\n\n${formatYieldPools(
+        yields
+      )}`
     );
   }
 
   /* ---------------- Portfolio ---------------- */
 
   if (parsed.intent === 'portfolio') {
-    await db.setConversationState(userId, { parsedCommand: parsed });
+    await db.setConversationState(userId, {
+      parsedCommand: parsed,
+    });
 
     let msg = `📊 *Portfolio Strategy*\n\n`;
     parsed.portfolio?.forEach((p: any) => {
@@ -264,36 +315,31 @@ async function handleTextMessage(
     );
   }
 
-  /* ---------------- Trailing Stop Order ---------------- */
+  /* ---------------- Trailing Stop ---------------- */
 
   if (parsed.intent === 'trailing_stop') {
     if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
+      await db.setConversationState(userId, {
+        parsedCommand: parsed,
+      });
       return ctx.reply(
-        `🎯 *Trailing Stop Order*\n\n` +
-        `Asset: ${parsed.fromAsset}\n` +
-        `Amount: ${parsed.amount}\n` +
-        `Trailing: ${parsed.trailingPercentage}%\n\n` +
-        `Please provide the destination wallet address.`
+        'Please provide the destination wallet address.'
       );
     }
 
-    await db.setConversationState(userId, { parsedCommand: parsed });
+    await db.setConversationState(userId, {
+      parsedCommand: parsed,
+    });
 
     return ctx.reply(
-      `🎯 *Confirm Trailing Stop Order*\n\n` +
-      `Sell: ${parsed.amount} ${parsed.fromAsset}\n` +
-      `Buy: ${parsed.toAsset}\n` +
-      `Trailing: ${parsed.trailingPercentage}%\n` +
-      `Address: \`${parsed.settleAddress}\`\n\n` +
-      `This order will automatically sell if the price drops ${parsed.trailingPercentage}% from its peak.`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          Markup.button.callback('✅ Confirm', 'confirm_trailing_stop'),
-          Markup.button.callback('❌ Cancel', 'cancel_swap'),
-        ]),
-      }
+      'Confirm trailing stop?',
+      Markup.inlineKeyboard([
+        Markup.button.callback(
+          '✅ Confirm',
+          'confirm_trailing_stop'
+        ),
+        Markup.button.callback('❌ Cancel', 'cancel_swap'),
+      ])
     );
   }
 
@@ -301,8 +347,12 @@ async function handleTextMessage(
 
   if (parsed.intent === 'limit_order') {
     if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
+      await db.setConversationState(userId, {
+        parsedCommand: parsed,
+      });
+      return ctx.reply(
+        'Please provide the destination wallet address.'
+      );
     }
   }
 
@@ -310,16 +360,25 @@ async function handleTextMessage(
 
   if (['swap', 'checkout'].includes(parsed.intent)) {
     if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
+      await db.setConversationState(userId, {
+        parsedCommand: parsed,
+      });
+      return ctx.reply(
+        'Please provide the destination wallet address.'
+      );
     }
 
-    await db.setConversationState(userId, { parsedCommand: parsed });
+    await db.setConversationState(userId, {
+      parsedCommand: parsed,
+    });
 
     return ctx.reply(
       'Confirm parameters?',
       Markup.inlineKeyboard([
-        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
+        Markup.button.callback(
+          '✅ Yes',
+          `confirm_${parsed.intent}`
+        ),
         Markup.button.callback('❌ Cancel', 'cancel_swap'),
       ])
     );
@@ -330,152 +389,42 @@ async function handleTextMessage(
 /* ACTIONS                                                                    */
 /* -------------------------------------------------------------------------- */
 
-bot.action(/deposit_(.+)/, async (ctx) => {
-  const poolId = ctx.match[1];
-  await ctx.answerCbQuery();
-  ctx.reply(`🚀 Starting deposit flow for pool: ${poolId}`);
-});
-
-bot.action('place_order', async (ctx) => {
-  const state = await db.getConversationState(ctx.from.id);
-  if (!state?.quoteId) return;
-
-  const order = await createOrder(
-    state.quoteId,
-    state.parsedCommand.settleAddress,
-    state.parsedCommand.settleAddress
-  );
-
-  await db.createOrderEntry(
-    ctx.from.id,
-    state.parsedCommand,
-    order,
-    state.settleAmount,
-    state.quoteId
-  );
-
-  await db.addWatchedOrder(ctx.from.id, order.id, 'pending');
-
-  ctx.editMessageText(
-    `✅ *Order Created*\n\nSign transaction to complete.`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        Markup.button.webApp(
-          '📱 Sign Transaction',
-          `${MINI_APP_URL}?to=${order.depositAddress}`
-        ),
-      ]),
-    }
-  );
-});
-
-bot.action('confirm_checkout', async (ctx) => {
-  const userId = ctx.from.id;
-  const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'checkout') return ctx.answerCbQuery('Start over.');
-
-  try {
-    await ctx.answerCbQuery('Creating link...');
-    const { settleAsset, settleNetwork, settleAmount, settleAddress } = state.parsedCommand;
-    const checkout = await createCheckout(settleAsset!, settleNetwork!, settleAmount!, settleAddress!);
-    if (!checkout?.id) throw new Error("API Error");
-
-    db.createCheckoutEntry(userId, checkout);
-    ctx.editMessageText(`✅ *Checkout Link Created!*\n💰 *Receive:* ${checkout.settleAmount} ${checkout.settleCoin}\n[Pay Here](https://pay.sideshift.ai/checkout/${checkout.id})`, {
-      parse_mode: 'Markdown',
-      link_preview_options: { is_disabled: true }
-    });
-  } catch (error) {
-    ctx.editMessageText(`Error creating link.`);
-  } finally {
-    db.clearConversationState(userId);
-  }
-});
-
-bot.action('confirm_portfolio', async (ctx) => {
-  const userId = ctx.from.id;
-  const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'portfolio') return ctx.answerCbQuery('Session expired.');
-
-  const { fromAsset, fromChain, amount, portfolio, settleAddress } = state.parsedCommand;
-
-  if (!portfolio || portfolio.length === 0) {
-    return ctx.editMessageText('❌ No portfolio allocation found.');
-  }
-
-  const totalPercentage = portfolio.reduce((sum: number, p: NonNullable<ParsedCommand['portfolio']>[number]) => sum + p.percentage, 0);
-  if (Math.abs(totalPercentage - 100) > 1) {
-    return ctx.editMessageText(`❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`);
-  }
-
-  if (!amount || amount <= 0) {
-    return ctx.editMessageText('❌ Invalid amount.');
-  }
-
-  try {
-    await ctx.answerCbQuery('Processing...');
-    const result = await executePortfolioStrategy(userId, state.parsedCommand);
-
-    const summary = result.successfulOrders
-      .map(o => `✅ ${o.allocation.toAsset}: ${o.swapAmount.toFixed(4)} ${fromAsset}`)
-      .join('\n');
-
-    ctx.editMessageText(`✅ Portfolio strategy executed successfully!\n\n${summary}`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Portfolio execution error:', { userId, error: errorMessage });
-    ctx.editMessageText(`❌ Portfolio execution failed: ${errorMessage}`);
-  } finally {
-    await db.clearConversationState(userId);
-  }
-});
-
 bot.action('confirm_trailing_stop', async (ctx) => {
   const userId = ctx.from.id;
   const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'trailing_stop') {
+
+  if (
+    !state?.parsedCommand ||
+    state.parsedCommand.intent !== 'trailing_stop'
+  ) {
     return ctx.answerCbQuery('Session expired.');
   }
 
-  const { fromAsset, toAsset, amount, trailingPercentage, settleAddress } = state.parsedCommand;
-
-  if (!amount || amount <= 0) {
-    return ctx.editMessageText('❌ Invalid amount.');
-  }
-
-  if (!trailingPercentage || trailingPercentage <= 0) {
-    return ctx.editMessageText('❌ Invalid trailing percentage.');
-  }
+  const {
+    fromAsset,
+    toAsset,
+    amount,
+    trailingPercentage,
+    settleAddress,
+  } = state.parsedCommand;
 
   try {
-    await ctx.answerCbQuery('Creating trailing stop order...');
+    const order =
+      await trailingStopWorker.createTrailingStopOrder({
+        telegramId: userId,
+        fromAsset: fromAsset!,
+        fromNetwork: 'ethereum',
+        toAsset: toAsset!,
+        toNetwork: 'ethereum',
+        fromAmount: amount.toString(),
+        trailingPercentage,
+        settleAddress: settleAddress!,
+      });
 
-    const order = await trailingStopWorker.createTrailingStopOrder({
-      telegramId: userId,
-      fromAsset: fromAsset!,
-      fromNetwork: 'ethereum',
-      toAsset: toAsset!,
-      toNetwork: 'ethereum',
-      fromAmount: amount.toString(),
-      trailingPercentage: trailingPercentage,
-      settleAddress: settleAddress!,
-    });
-
-    ctx.editMessageText(
-      `✅ *Trailing Stop Order Created!*\n\n` +
-      `Order ID: \`${order.id}\`\n` +
-      `Asset: ${order.fromAsset}\n` +
-      `Amount: ${order.fromAmount}\n` +
-      `Trailing: ${order.trailingPercentage}%\n` +
-      `Status: ${order.status}\n\n` +
-      `The order is now active and monitoring prices. You'll be notified when the trailing stop is triggered.`,
+    await ctx.editMessageText(
+      `✅ *Trailing Stop Order Created!*\n\n*Order ID:* \`${order.id}\``,
       { parse_mode: 'Markdown' }
     );
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Trailing stop creation error:', { userId, error: errorMessage });
-    ctx.editMessageText(`❌ Failed to create trailing stop order: ${errorMessage}`);
   } finally {
     await db.clearConversationState(userId);
   }
@@ -513,7 +462,7 @@ async function start() {
     orderMonitor.start();
 
     const server = app.listen(PORT, () =>
-      logger.info(`🌍 Server running on port ${PORT}`)
+      logger.info(`🌍 Server running on ${PORT}`)
     );
 
     await bot.launch();
