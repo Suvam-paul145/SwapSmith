@@ -18,7 +18,7 @@ import {
 
 import Navbar from "@/components/Navbar";
 import ClaudeChatInput from "@/components/ClaudeChatInput";
-import SwapConfirmation from "@/components/SwapConfirmation";
+import SwapConfirmation, { QuoteData } from "@/components/SwapConfirmation";
 import IntentConfirmation from "@/components/IntentConfirmation";
 import FullPageAd from "@/components/FullPageAd";
 import PlanLimitBanner from "@/components/PlanLimitBanner";
@@ -27,28 +27,9 @@ import { useTerminalFullPageAd } from "@/hooks/useAds";
 import { useChatHistory, useChatSessions } from "@/hooks/useCachedData";
 import { useErrorHandler, ErrorType } from "@/hooks/useErrorHandler";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-// ...existing code...
 import { usePlan } from "@/hooks/usePlan";
 
 import { ParsedCommand } from "@/utils/groq-client";
-
-/* -------------------------------------------------------------------------- */
-/* Types                                    */
-/* -------------------------------------------------------------------------- */
-
-interface QuoteData {
-  depositAmount: string;
-  depositCoin: string;
-  depositNetwork: string;
-  rate: string;
-  settleAmount: string;
-  settleCoin: string;
-  settleNetwork: string;
-  depositAddress?: string;
-  memo?: string;
-  expiry?: string;
-  id?: string;
-}
 
 interface Message {
   role: "user" | "assistant";
