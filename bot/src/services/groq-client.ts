@@ -53,6 +53,9 @@ export interface ParsedCommand {
     toChain: string;
     percentage: number;
   }[];
+  driftThreshold?: number;
+  autoRebalance?: boolean;
+  portfolioName?: string;
 
   // DCA Fields
   frequency?: "daily" | "weekly" | "monthly" | string | null;

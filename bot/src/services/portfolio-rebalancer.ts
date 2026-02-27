@@ -35,7 +35,7 @@ async function executeRebalanceSwap(
       fromNetwork,
       toAsset,
       toNetwork,
-      amount.toString()
+      amount
     );
 
     if (!quote?.id) {
@@ -49,7 +49,7 @@ async function executeRebalanceSwap(
       fromAsset,
       toAsset,
       fromAmount: amount,
-      toAmount: parseFloat(quote.toAmount || '0'),
+      toAmount: parseFloat(quote.settleAmount || '0'),
       sideshiftOrderId: order.id,
       status: 'completed'
     };
