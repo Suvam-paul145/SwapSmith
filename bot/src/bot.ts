@@ -405,6 +405,7 @@ bot.action('cancel_swap', async (ctx) => {
 /* -------------------------------------------------------------------------- */
 
 const dcaScheduler = new DCAScheduler();
+
 async function start() {
   try {
     if (process.env.SENTRY_DSN) {

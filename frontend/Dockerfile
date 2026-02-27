@@ -4,11 +4,10 @@ FROM node:20-alpine AS builder
 # Set up root working directory
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+# Copy the shared directory 
+COPY shared ./shared
 
 RUN apk add --no-cache ffmpeg
-COPY . .
 
 # Change into frontend directory
 WORKDIR /app/frontend

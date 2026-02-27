@@ -28,7 +28,7 @@ export default function Footer() {
   }
 
   const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/
     return emailRegex.test(email)
   }
 
