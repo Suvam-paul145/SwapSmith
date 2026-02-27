@@ -295,7 +295,7 @@ export default function TerminalPage() {
       });
       const quote = await quoteResponse.json();
       if (quote.error) throw new Error(quote.error);
-      
+
       addMessage({
         role: "assistant",
         content: `Swap Prepared: ${quote.depositAmount} ${quote.depositCoin} → ${quote.settleAmount} ${quote.settleCoin}`,
@@ -320,16 +320,16 @@ export default function TerminalPage() {
       setLimitBannerVisible(true);
       return;
     }
-    
+
     // Add user message first
     addMessage({
-        role: "user",
-        content: text,
-        type: "message",
+      role: "user",
+      content: text,
+      type: "message",
     });
 
     if (!isLoading) setIsLoading(true);
-    
+
     try {
       const response = await fetch("/api/parse-command", {
         method: "POST",
@@ -618,15 +618,26 @@ export default function TerminalPage() {
                           quote={(msg.data as { quoteData: QuoteData }).quoteData}
                           confidence={(msg.data as { confidence: number }).confidence}
                           onAmountChange={(newAmount) => {
-                            // Update the quote with the new amount
                             const quoteData = (msg.data as { quoteData?: QuoteData })?.quoteData;
                             if (quoteData) {
-                              const updatedQuote = { ...quoteData, depositAmount: newAmount };
-                              addMessage({
-                                role: 'assistant',
-                                content: `Amount updated to ${newAmount} ${quoteData.depositCoin}. Please review the new swap details.`,
-                                type: 'message'
-                              });
+                              const command: ParsedCommand = {
+                                success: true,
+                                intent: 'swap',
+                                fromAsset: quoteData.depositCoin,
+                                toAsset: quoteData.settleCoin,
+                                amount: parseFloat(newAmount),
+                                fromChain: quoteData.depositNetwork,
+                                toChain: quoteData.settleNetwork,
+                                confidence: 100,
+                                requiresConfirmation: false,
+                                settleAsset: quoteData.settleCoin,
+                                settleNetwork: quoteData.settleNetwork,
+                                settleAmount: parseFloat(quoteData.settleAmount),
+                                settleAddress: '',
+                                validationErrors: [],
+                                parsedMessage: `Updating swap amount to ${newAmount}`
+                              };
+                              executeSwap(command);
                             }
                           }}
                         />

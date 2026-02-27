@@ -10,7 +10,7 @@ import { execFile } from 'child_process';
 import express from 'express';
 import { sql } from 'drizzle-orm';
 import { transcribeAudio, ParsedCommand } from './services/groq-client';
-import logger, { Sentry } from './services/logger';
+import logger, { Sentry, handleError } from './services/logger';
 import { getOrderStatus, createOrder, createCheckout } from './services/sideshift-client';
 import { getTopStablecoinYields, formatYieldPools } from './services/yield-client';
 import * as db from './services/database';
@@ -223,7 +223,7 @@ async function handleTextMessage(
   if (!parsed.success) {
     return ctx.replyWithMarkdown(
       (parsed as any).validationErrors?.join('\n') ||
-        '❌ I didn’t understand.'
+      '❌ I didn’t understand.'
     );
   }
 
@@ -255,14 +255,44 @@ async function handleTextMessage(
     );
   }
 
+
+
+  if (parsed.intent === 'limit_order') {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply('Please provide the destination wallet address.');
+    }
+  }
+
+
+  if (['swap', 'checkout'].includes(parsed.intent)) {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply('Please provide the destination wallet address.');
+    }
+
+    await db.setConversationState(userId, { parsedCommand: parsed });
+
+    return ctx.reply(
+      'Confirm parameters?',
+      Markup.inlineKeyboard([
+        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
+        Markup.button.callback('❌ Cancel', 'cancel_swap'),
+      ])
+    );
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* ACTIONS                                                                    */
+/* -------------------------------------------------------------------------- */
+
 bot.action(/deposit_(.+)/, async (ctx) => {
 
   const poolId = ctx.match[1];
-
   await ctx.answerCbQuery();
   ctx.reply(`🚀 Starting deposit flow for pool: ${poolId}`);
 });
-
 
 bot.action('place_order', async (ctx) => {
   const state = await db.getConversationState(ctx.from.id);
@@ -332,7 +362,7 @@ bot.action('confirm_portfolio', async (ctx) => {
     return ctx.editMessageText('❌ No portfolio allocation found.');
   }
 
-  const totalPercentage = portfolio.reduce((sum: number, p: NonNullable<ParsedCommand['portfolio']>[number]) => sum + p.percentage, 0);
+  const totalPercentage = portfolio.reduce((sum: number, p: any) => sum + p.percentage, 0);
   if (Math.abs(totalPercentage - 100) > 1) {
     return ctx.editMessageText(`❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`);
   }
@@ -358,42 +388,6 @@ bot.action('confirm_portfolio', async (ctx) => {
     await db.clearConversationState(userId);
   }
 });
-
-  if (parsed.intent === 'limit_order') {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
-    }
-  } catch (error) {
-    handleError('PortfolioExecutionFailed', error, ctx);
-    ctx.editMessageText('❌ Failed to execute portfolio strategy.');
-  } finally {
-    await db.clearConversationState(userId);
-  }
-});
-
-  if (['swap', 'checkout'].includes(parsed.intent)) {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
-    }
-
-    await db.setConversationState(userId, { parsedCommand: parsed });
-
-    return ctx.reply(
-      'Confirm parameters?',
-      Markup.inlineKeyboard([
-        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
-        Markup.button.callback('❌ Cancel', 'cancel_swap'),
-      ])
-    );
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* ACTIONS                                                                    */
-/* -------------------------------------------------------------------------- */
-
 bot.action('cancel_swap', async (ctx) => {
   if (!ctx.from) return;
   await db.clearConversationState(ctx.from.id);
