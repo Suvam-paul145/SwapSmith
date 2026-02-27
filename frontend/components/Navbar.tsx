@@ -92,17 +92,17 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group shrink-0">
-            <div className="bg-blue-600 p-1.5 rounded-xl shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-all duration-200">
-              <Zap className="w-5 h-5 text-white" fill="white" />
+            <div className="rounded-xl shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-all duration-200 overflow-hidden" style={{ width: 32, height: 32 }}>
+              <Image src="/swapsmithicon.png" alt="SwapSmith" width={32} height={32} />
             </div>
             <span className="hidden lg:block text-lg font-black uppercase tracking-tighter text-zinc-900 dark:text-white">
               SwapSmith
             </span>
           </Link>
 
-          {/* Center Navigation */}
-          <div className="flex items-center justify-center px-4 flex-wrap">
-            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/40 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+          {/* Center Navigation - hidden on mobile, shown on md+ */}
+          <div className="hidden md:flex items-center justify-center px-4">
+            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/40 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
               <Link
                 href="/"
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shrink-0 ${
@@ -130,19 +130,19 @@ export default function Navbar() {
                 </Link>
               ))}
             </div>
-            <div className="ml-4 hidden xl:block">
+            <div className="ml-4 hidden xl:block flex-shrink-0">
               <MarketSentimentWidget />
             </div>
           </div>
 
           {/* Right Side Actions */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="hidden sm:flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+            <div className="hidden md:flex items-center gap-3">
               <WalletConnector />
               <ThemeToggle />
             </div>
 
-            <div className="relative" ref={profileRef}>
+            <div className="hidden md:block relative" ref={profileRef}>
               <button
                 onClick={() => setShowProfileMenu((v) => !v)}
                 className="p-1 rounded-full border-2 border-transparent hover:border-blue-500 transition-all active:scale-95"
@@ -189,7 +189,7 @@ export default function Navbar() {
 
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="sm:hidden p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+              className="md:hidden p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 ml-auto"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -197,32 +197,56 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu - shown below md */}
       {mobileMenuOpen && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" onClick={() => setMobileMenuOpen(false)} />
           <div className="fixed top-0 right-0 bottom-0 w-[85%] max-w-sm bg-white dark:bg-zinc-900 shadow-2xl z-[70] animate-in slide-in-from-right duration-300">
             <div className="p-6 flex flex-col h-full">
-              <div className="flex items-center justify-between mb-8">
-                <span className="font-black tracking-tighter text-xl text-primary">NAVIGATION</span>
+              <div className="flex items-center justify-between mb-6">
+                <Link href="/" className="flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                  <div className="rounded-xl overflow-hidden" style={{ width: 32, height: 32 }}>
+                    <Image src="/swapsmithicon.png" alt="SwapSmith" width={32} height={32} />
+                  </div>
+                  <span className="font-black text-lg uppercase tracking-tighter text-zinc-900 dark:text-white">SwapSmith</span>
+                </Link>
                 <button onClick={() => setMobileMenuOpen(false)} className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800"><X /></button>
               </div>
-              <div className="space-y-2 flex-1 overflow-y-auto">
+              <div className="space-y-1 flex-1 overflow-y-auto">
                 {[{ href: "/", label: "Home", Icon: Home }, ...NAV_ITEMS].map(({ href, label, Icon }) => (
                   <Link
                     key={href}
                     href={href}
-                    className={`flex items-center gap-4 p-4 rounded-2xl text-lg font-bold transition-all ${
-                      pathname === href ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    className={`flex items-center gap-4 p-4 rounded-2xl text-base font-bold transition-all ${
+                      pathname === href ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:text-zinc-300"
                     }`}
                   >
-                    <Icon className="w-6 h-6" /> {label}
+                    <Icon className="w-5 h-5" /> {label}
+                  </Link>
+                ))}
+                {PROFILE_MENU.map(({ href, label, Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`flex items-center gap-4 p-4 rounded-2xl text-base font-bold transition-all ${
+                      pathname === href ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:text-zinc-300"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" /> {label}
                   </Link>
                 ))}
               </div>
               <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
                 <WalletConnector />
-                <div className="flex justify-center"><ThemeToggle /></div>
+                <div className="flex items-center justify-between">
+                  <ThemeToggle />
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); logout(); }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" /> Logout
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -53,6 +53,93 @@ export const conversations = pgTable('conversations', {
   index("idx_conversations_telegram_id").on(table.telegramId),
 ]);
 
+export const traderStats = pgTable('trader_stats', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  totalTrades: integer('total_trades').notNull().default(0),
+  successfulTrades: integer('successful_trades').notNull().default(0),
+  totalVolumeUSD: text('total_volume_usd').notNull().default('0'),
+  followerCount: integer('follower_count').notNull().default(0),
+  totalCopies: integer('total_copies').notNull().default(0),
+  averageReturn: real('average_return').notNull().default(0),
+  winRate: real('win_rate').notNull().default(0),
+  reputationScore: real('reputation_score').notNull().default(0),
+  lastUpdated: timestamp('last_updated').defaultNow(),
+}, (table) => [
+  index("idx_trader_stats_user_id").on(table.userId),
+]);
+
+export const followedTraders = pgTable('followed_traders', {
+  id: serial('id').primaryKey(),
+  followerId: integer('follower_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  traderId: integer('trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  notifyOnPortfolioChange: boolean('notify_on_portfolio_change').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_followed_traders_follower_id").on(table.followerId),
+  index("idx_followed_traders_trader_id").on(table.traderId),
+]);
+
+export const sharedPortfolios = pgTable('shared_portfolios', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  shareCode: text('share_code').notNull().unique(),
+  title: text('title').notNull(),
+  description: text('description'),
+  fromAsset: text('from_asset').notNull(),
+  fromChain: text('from_chain'),
+  portfolio: jsonb('portfolio').notNull(), // Array<{ toAsset: string; toChain: string; percentage: number }>
+  isPublic: boolean('is_public').notNull().default(true),
+  expiresAt: timestamp('expires_at'),
+  copyCount: integer('copy_count').notNull().default(0),
+  likeCount: integer('like_count').notNull().default(0),
+  viewCount: integer('view_count').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index("idx_shared_portfolios_user_id").on(table.userId),
+  index("idx_shared_portfolios_share_code").on(table.shareCode),
+  index("idx_shared_portfolios_is_public").on(table.isPublic),
+]);
+
+export const portfolioCopies = pgTable('portfolio_copies', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  portfolioId: integer('portfolio_id').notNull().references(() => sharedPortfolios.id, { onDelete: 'cascade' }),
+  originalTraderId: integer('original_trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  copiedAmount: text('copied_amount'),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_portfolio_copies_user_id").on(table.userId),
+  index("idx_portfolio_copies_portfolio_id").on(table.portfolioId),
+]);
+
+export const portfolioNotifications = pgTable('portfolio_notifications', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  traderId: integer('trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  portfolioId: integer('portfolio_id').references(() => sharedPortfolios.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  isRead: boolean('is_read').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_portfolio_notifications_user_id").on(table.userId),
+]);
+
+export const portfolioHistory = pgTable('portfolio_history', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  portfolioId: integer('portfolio_id').notNull().references(() => sharedPortfolios.id, { onDelete: 'cascade' }),
+  changeType: text('change_type').notNull(),
+  previousPortfolio: jsonb('previous_portfolio'),
+  newPortfolio: jsonb('new_portfolio').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_portfolio_history_portfolio_id").on(table.portfolioId),
+]);
 
 export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
@@ -345,6 +432,102 @@ export const rewardsLog = pgTable('rewards_log', {
   index("idx_rewards_log_user_id").on(table.userId),
 ]);
 
+<<<<<<< 356
+
+// --- GAS FEE OPTIMIZATION SCHEMAS ---
+
+export const gasEstimates = pgTable('gas_estimates', {
+  id: serial('id').primaryKey(),
+  chain: text('chain').notNull(),
+  network: text('network').notNull(),
+  gasPrice: text('gas_price').notNull(), // in wei or gwei
+  gasPriceUnit: text('gas_price_unit').notNull().default('gwei'),
+  priorityFee: text('priority_fee'), // for EIP-1559 chains
+  baseFee: text('base_fee'), // for EIP-1559 chains
+  estimatedTimeSeconds: integer('estimated_time_seconds'), // estimated confirmation time
+  confidence: real('confidence'), // confidence score 0-100
+  source: text('source').notNull(), // 'ethgasstation', 'gelato', 'provider', etc.
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_gas_estimates_chain_network").on(table.chain, table.network),
+  index("idx_gas_estimates_expires").on(table.expiresAt),
+]);
+
+export const gasTokens = pgTable('gas_tokens', {
+  id: serial('id').primaryKey(),
+  symbol: text('symbol').notNull().unique(),
+  name: text('name').notNull(),
+  contractAddress: text('contract_address').notNull(),
+  chain: text('chain').notNull(),
+  network: text('network').notNull(),
+  decimals: integer('decimals').notNull().default(18),
+  tokenType: text('token_type').notNull(), // 'chi', 'gst', 'custom'
+  discountPercent: real('discount_percent').notNull().default(0), // discount % when using this token
+  isActive: boolean('is_active').notNull().default(true),
+  metadata: jsonb('metadata'), // additional token metadata
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index("idx_gas_tokens_symbol").on(table.symbol),
+  index("idx_gas_tokens_chain_network").on(table.chain, table.network),
+]);
+
+export const userGasPreferences = pgTable('user_gas_preferences', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().unique(),
+  preferredGasToken: text('preferred_gas_token').references(() => gasTokens.symbol),
+  autoOptimize: boolean('auto_optimize').notNull().default(true),
+  maxGasPrice: text('max_gas_price'), // max gas price user is willing to pay
+  priorityLevel: text('priority_level').notNull().default('medium'), // 'low', 'medium', 'high'
+  batchTransactions: boolean('batch_transactions').notNull().default(false),
+  notificationsEnabled: boolean('notifications_enabled').notNull().default(true),
+  customSettings: jsonb('custom_settings'), // additional user-specific settings
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_user_gas_preferences_user_id").on(table.userId),
+]);
+
+export const batchedTransactions = pgTable('batched_transactions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  batchId: text('batch_id').notNull().unique(),
+  transactions: jsonb('transactions').notNull(), // array of transactions to batch
+  status: text('status').notNull().default('pending'), // 'pending', 'processing', 'completed', 'failed'
+  targetGasPrice: text('target_gas_price'), // execute when gas price drops to this level
+  maxExecutionTime: timestamp('max_execution_time'), // deadline for execution
+  executedAt: timestamp('executed_at'),
+  executionTxHash: text('execution_tx_hash'),
+  gasSaved: text('gas_saved'), // amount of gas saved by batching
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index("idx_batched_transactions_user_id").on(table.userId),
+  index("idx_batched_transactions_status").on(table.status),
+  index("idx_batched_transactions_batch_id").on(table.batchId),
+]);
+
+export const gasOptimizationHistory = pgTable('gas_optimization_history', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  swapId: text('swap_id').references(() => swapHistory.sideshiftOrderId),
+  originalGasEstimate: text('original_gas_estimate').notNull(),
+  optimizedGasEstimate: text('optimized_gas_estimate').notNull(),
+  gasTokenUsed: text('gas_token_used').references(() => gasTokens.symbol),
+  gasSaved: text('gas_saved').notNull(),
+  savingsPercent: real('savings_percent').notNull(),
+  optimizationType: text('optimization_type').notNull(), // 'token_discount', 'batching', 'timing', 'combined'
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_gas_optimization_history_user_id").on(table.userId),
+  index("idx_gas_optimization_history_swap_id").on(table.swapId),
+]);
+
+=======
+>>>>>>> main
 
 // --- GAS FEE OPTIMIZATION SCHEMAS ---
 
@@ -482,3 +665,46 @@ export const planPurchasesRelations = relations(planPurchases, ({one}) => ({
     references: [users.id],
   }),
 }));
+
+// --- ADMIN SCHEMAS ---
+
+export const adminRoleType = pgEnum('admin_role', ['super_admin', 'admin', 'moderator']);
+export const adminRequestStatus = pgEnum('admin_request_status', ['pending', 'approved', 'rejected']);
+
+export const adminUsers = pgTable('admin_users', {
+  id: serial('id').primaryKey(),
+  firebaseUid: text('firebase_uid').notNull().unique(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  role: adminRoleType('role').notNull().default('admin'),
+  isActive: boolean('is_active').notNull().default(true),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: text('approved_by'), // email of approver
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('idx_admin_users_email').on(table.email),
+  index('idx_admin_users_firebase_uid').on(table.firebaseUid),
+]);
+
+export const adminRequests = pgTable('admin_requests', {
+  id: serial('id').primaryKey(),
+  firebaseUid: text('firebase_uid').notNull().unique(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  reason: text('reason').notNull(),
+  status: adminRequestStatus('status').notNull().default('pending'),
+  approvalToken: text('approval_token').notNull().unique(),
+  rejectionReason: text('rejection_reason'),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedBy: text('reviewed_by'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('idx_admin_requests_email').on(table.email),
+  index('idx_admin_requests_status').on(table.status),
+  index('idx_admin_requests_token').on(table.approvalToken),
+]);
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type AdminRequest = typeof adminRequests.$inferSelect;

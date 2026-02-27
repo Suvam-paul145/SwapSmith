@@ -7,6 +7,8 @@ WORKDIR /app
 # Copy the shared directory 
 COPY shared ./shared
 
+RUN apk add --no-cache ffmpeg
+
 # Change into frontend directory
 WORKDIR /app/frontend
 
@@ -22,6 +24,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app/frontend
 
 ENV NODE_ENV=production
+RUN apk add --no-cache ffmpeg
 
 # copy standalone output (adjust paths to accommodate the new WORKDIR)
 COPY --from=builder /app/frontend/.next/standalone ./
