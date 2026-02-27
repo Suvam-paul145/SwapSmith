@@ -240,6 +240,36 @@ export const limitOrders = pgTable('limit_orders', {
   index("idx_limit_orders_telegram_id").on(table.telegramId),
 ]);
 
+export const trailingStopOrders = pgTable('trailing_stop_orders', {
+  id: serial('id').primaryKey(),
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  userId: text('user_id'),
+  fromAsset: text('from_asset').notNull(),
+  fromNetwork: text('from_network').notNull(),
+  toAsset: text('to_asset').notNull(),
+  toNetwork: text('to_network').notNull(),
+  fromAmount: text('from_amount').notNull(),
+  trailingPercentage: real('trailing_percentage').notNull(), // e.g., 5.0 for 5%
+  peakPrice: numeric('peak_price', { precision: 20, scale: 8 }), // highest price seen
+  currentPrice: numeric('current_price', { precision: 20, scale: 8 }), // last checked price
+  triggerPrice: numeric('trigger_price', { precision: 20, scale: 8 }), // calculated trigger threshold
+  isActive: boolean('is_active').notNull().default(true),
+  status: text('status').notNull().default('pending'), // pending, triggered, completed, cancelled, expired
+  settleAddress: text('settle_address'),
+  sideshiftOrderId: text('sideshift_order_id'),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow(),
+  lastCheckedAt: timestamp('last_checked_at'),
+  triggeredAt: timestamp('triggered_at'),
+  expiresAt: timestamp('expires_at'), // optional expiration
+}, (table) => [
+  index("idx_trailing_stop_orders_telegram_id").on(table.telegramId),
+  index("idx_trailing_stop_orders_user_id").on(table.userId),
+  index("idx_trailing_stop_orders_is_active").on(table.isActive),
+  index("idx_trailing_stop_orders_status").on(table.status),
+]);
+
+
 
 // --- SHARED SCHEMAS (used by both bot and frontend) ---
 

@@ -17,6 +17,7 @@ import * as db from './services/database';
 import { DCAScheduler } from './services/dca-scheduler';
 import { resolveAddress, isNamingService } from './services/address-resolver';
 import { limitOrderWorker } from './workers/limitOrderWorker';
+import { trailingStopWorker } from './workers/trailing-stop';
 import { OrderMonitor } from './services/order-monitor';
 import { parseUserCommand } from './services/parseUserCommand';
 import { isValidAddress } from './config/address-patterns';
@@ -92,7 +93,7 @@ const orderMonitor = new OrderMonitor({
         parse_mode: 'Markdown',
       });
     } catch (e) {
-      handleError('OrderUpdateNotifyFailed', e, { from: { id: telegramId } });
+      logger.error('OrderUpdateNotifyFailed', e);
     }
 
   },
@@ -193,7 +194,7 @@ async function handleTextMessage(
   if (
     state?.parsedCommand &&
     !state.parsedCommand.settleAddress &&
-    ['swap', 'checkout', 'portfolio', 'limit_order'].includes(
+    ['swap', 'checkout', 'portfolio', 'limit_order', 'trailing_stop'].includes(
       state.parsedCommand.intent
     )
   ) {
@@ -234,7 +235,7 @@ async function handleTextMessage(
   if (!parsed.success) {
     return ctx.replyWithMarkdown(
       (parsed as any).validationErrors?.join('\n') ||
-        '❌ I didn’t understand.'
+        '❌ I didn\'t understand.'
     );
   }
 
@@ -266,14 +267,77 @@ async function handleTextMessage(
     );
   }
 
+  /* ---------------- Trailing Stop Order ---------------- */
+
+  if (parsed.intent === 'trailing_stop') {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply(
+        `🎯 *Trailing Stop Order*\n\n` +
+        `Asset: ${parsed.fromAsset}\n` +
+        `Amount: ${parsed.amount}\n` +
+        `Trailing: ${parsed.trailingPercentage}%\n\n` +
+        `Please provide the destination wallet address.`
+      );
+    }
+
+    await db.setConversationState(userId, { parsedCommand: parsed });
+
+    return ctx.reply(
+      `🎯 *Confirm Trailing Stop Order*\n\n` +
+      `Sell: ${parsed.amount} ${parsed.fromAsset}\n` +
+      `Buy: ${parsed.toAsset}\n` +
+      `Trailing: ${parsed.trailingPercentage}%\n` +
+      `Address: \`${parsed.settleAddress}\`\n\n` +
+      `This order will automatically sell if the price drops ${parsed.trailingPercentage}% from its peak.`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          Markup.button.callback('✅ Confirm', 'confirm_trailing_stop'),
+          Markup.button.callback('❌ Cancel', 'cancel_swap'),
+        ]),
+      }
+    );
+  }
+
+  /* ---------------- Limit Order ---------------- */
+
+  if (parsed.intent === 'limit_order') {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply('Please provide the destination wallet address.');
+    }
+  }
+
+  /* ---------------- Swap / Checkout ---------------- */
+
+  if (['swap', 'checkout'].includes(parsed.intent)) {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply('Please provide the destination wallet address.');
+    }
+
+    await db.setConversationState(userId, { parsedCommand: parsed });
+
+    return ctx.reply(
+      'Confirm parameters?',
+      Markup.inlineKeyboard([
+        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
+        Markup.button.callback('❌ Cancel', 'cancel_swap'),
+      ])
+    );
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* ACTIONS                                                                    */
+/* -------------------------------------------------------------------------- */
+
 bot.action(/deposit_(.+)/, async (ctx) => {
-
   const poolId = ctx.match[1];
-
   await ctx.answerCbQuery();
   ctx.reply(`🚀 Starting deposit flow for pool: ${poolId}`);
 });
-
 
 bot.action('place_order', async (ctx) => {
   const state = await db.getConversationState(ctx.from.id);
@@ -335,17 +399,27 @@ bot.action('confirm_checkout', async (ctx) => {
 bot.action('confirm_portfolio', async (ctx) => {
   const userId = ctx.from.id;
   const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'portfolio') return ctx.answerCbQuery('Session expired.');
 
-  const { fromAsset, fromChain, amount, portfolio, settleAddress } = state.parsedCommand;
+  if (!state?.parsedCommand || state.parsedCommand.intent !== 'portfolio') {
+    return ctx.answerCbQuery('Session expired.');
+  }
+
+  const { fromAsset, fromChain, amount, portfolio, settleAddress } =
+    state.parsedCommand;
 
   if (!portfolio || portfolio.length === 0) {
     return ctx.editMessageText('❌ No portfolio allocation found.');
   }
 
-  const totalPercentage = portfolio.reduce((sum: number, p: NonNullable<ParsedCommand['portfolio']>[number]) => sum + p.percentage, 0);
+  const totalPercentage = portfolio.reduce(
+    (sum: number, p: any) => sum + p.percentage,
+    0
+  );
+
   if (Math.abs(totalPercentage - 100) > 1) {
-    return ctx.editMessageText(`❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`);
+    return ctx.editMessageText(
+      `❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`
+    );
   }
 
   if (!amount || amount <= 0) {
@@ -353,58 +427,96 @@ bot.action('confirm_portfolio', async (ctx) => {
   }
 
   try {
-<<<<<<< HEAD
     await ctx.answerCbQuery('Executing portfolio strategy...');
+
     const result = await executePortfolioStrategy(userId, {
-      fromAsset,
-      fromChain,
+      fromAsset: fromAsset!,
+      fromChain: fromChain!,
+      amount,
+      portfolio,
+      settleAddress: settleAddress!,
+    });
+
+    const summary = result
+      .map(
+        (r: any) =>
+          `• ${r.amount} ${r.fromAsset} → ${r.toAsset} (${r.chain})`
+      )
       .join('\n');
 
-    ctx.editMessageText(`✅ Portfolio strategy executed successfully!\n\n${summary}`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Portfolio execution error:', { userId, error: errorMessage });
-    ctx.editMessageText(`❌ Portfolio execution failed: ${errorMessage}`);
-  } finally {
-    await db.clearConversationState(userId);
-  }
-});
-
-  if (parsed.intent === 'limit_order') {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
->>>>>>> b4738f491ddf4e939a8e40c1646b63af7dfa03de
-    }
-
-  } catch (error) {
-    handleError('PortfolioExecutionFailed', error, ctx);
-  } finally {
-    await db.clearConversationState(userId);
-  }
-});
-
-  if (['swap', 'checkout'].includes(parsed.intent)) {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
-    }
-
-    await db.setConversationState(userId, { parsedCommand: parsed });
-
-    return ctx.reply(
-      'Confirm parameters?',
-      Markup.inlineKeyboard([
-        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
-        Markup.button.callback('❌ Cancel', 'cancel_swap'),
-      ])
+    ctx.editMessageText(
+      `✅ *Portfolio strategy executed successfully!*\n\n${summary}`,
+      { parse_mode: 'Markdown' }
     );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Unknown error';
+    logger.error('PortfolioExecutionFailed', { userId, error: message });
+    ctx.editMessageText(`❌ Portfolio execution failed: ${message}`);
+  } finally {
+    await db.clearConversationState(userId);
   }
-}
+});
 
-/* -------------------------------------------------------------------------- */
-/* ACTIONS                                                                    */
-/* -------------------------------------------------------------------------- */
+bot.action('confirm_trailing_stop', async (ctx) => {
+  const userId = ctx.from.id;
+  const state = await db.getConversationState(userId);
+
+  if (!state?.parsedCommand || state.parsedCommand.intent !== 'trailing_stop') {
+    return ctx.answerCbQuery('Session expired.');
+  }
+
+  const {
+    fromAsset,
+    toAsset,
+    amount,
+    trailingPercentage,
+    settleAddress,
+  } = state.parsedCommand;
+
+  if (!amount || amount <= 0) {
+    return ctx.editMessageText('❌ Invalid amount.');
+  }
+
+  if (!trailingPercentage || trailingPercentage <= 0) {
+    return ctx.editMessageText('❌ Invalid trailing percentage.');
+  }
+
+  try {
+    await ctx.answerCbQuery('Creating trailing stop order...');
+
+    const order =
+      await trailingStopWorker.createTrailingStopOrder({
+        telegramId: userId,
+        fromAsset: fromAsset!,
+        fromNetwork: 'ethereum',
+        toAsset: toAsset!,
+        toNetwork: 'ethereum',
+        fromAmount: amount.toString(),
+        trailingPercentage,
+        settleAddress: settleAddress!,
+      });
+
+    ctx.editMessageText(
+      `✅ *Trailing Stop Order Created!*\n\n` +
+        `Order ID: \`${order.id}\`\n` +
+        `Asset: ${order.fromAsset}\n` +
+        `Amount: ${order.fromAmount}\n` +
+        `Trailing: ${order.trailingPercentage}%\n` +
+        `Status: ${order.status}`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Unknown error';
+    logger.error('TrailingStopFailed', { userId, error: message });
+    ctx.editMessageText(
+      `❌ Failed to create trailing stop order: ${message}`
+    );
+  } finally {
+    await db.clearConversationState(userId);
+  }
+});
 
 bot.action('cancel_swap', async (ctx) => {
   if (!ctx.from) return;
@@ -431,6 +543,7 @@ async function start() {
       await db.db.execute(sql`SELECT 1`);
       dcaScheduler.start();
       limitOrderWorker.start(bot);
+      trailingStopWorker.start(bot);
     }
 
     await orderMonitor.loadPendingOrders();
@@ -446,6 +559,7 @@ async function start() {
     const shutdown = (signal: string) => {
       dcaScheduler.stop();
       limitOrderWorker.stop();
+      trailingStopWorker.stop();
       orderMonitor.stop();
       bot.stop(signal);
       server.close(() => process.exit(0));
@@ -454,7 +568,7 @@ async function start() {
     process.once('SIGINT', () => shutdown('SIGINT'));
     process.once('SIGTERM', () => shutdown('SIGTERM'));
   } catch (e) {
-    handleError('StartupFailed', e);
+    logger.error('StartupFailed', e);
     process.exit(1);
   }
 }
