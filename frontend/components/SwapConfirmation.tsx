@@ -4,6 +4,7 @@ import { useAccount, useSendTransaction, useSwitchChain, usePublicClient, useBal
 import { parseEther, formatEther, type Chain, formatUnits, parseUnits } from 'viem'
 import { mainnet, polygon, arbitrum, avalanche, optimism, bsc, base } from 'wagmi/chains'
 import { SIDESHIFT_CONFIG } from '../../shared/config/sideshift'
+import { getCoins } from '@/utils/sideshift-client'
 
 export interface QuoteData {
   depositAmount: string;
@@ -69,9 +70,9 @@ export default function SwapConfirmation({ quote, confidence = 100, onAmountChan
   const [copiedMemo, setCopiedMemo] = useState(false)
   const [isSimulating, setIsSimulating] = useState(false);
   const [safetyCheck, setSafetyCheck] = useState<SafetyCheckResult | null>(null);
-  const [walletBalance, setWalletBalance] = useState<string | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
-
+  const [tokenAddress, setTokenAddress] = useState<string | undefined>(undefined);
+  const [isMaxLoading, setIsMaxLoading] = useState(false);
   const { address, isConnected, chain: connectedChain } = useAccount()
   const { data: hash, error, isPending, isSuccess, sendTransaction } = useSendTransaction()
   const { switchChainAsync } = useSwitchChain()
@@ -111,30 +112,6 @@ export default function SwapConfirmation({ quote, confidence = 100, onAmountChan
     chainId: depositChainId,
     token: tokenAddress as `0x${string}` | undefined,
   });
-
-  const handleMaxClick = async () => {
-    if (!balanceData || !onRequote) return;
-    setIsMaxLoading(true);
-
-    try {
-      let amount = balanceData.formatted;
-
-      // If native token, leave a gas buffer
-      if (!tokenAddress) {
-        // 0.01 Native Token Buffer
-        const buffer = parseUnits("0.01", balanceData.decimals);
-        if (balanceData.value > buffer) {
-          amount = formatUnits(balanceData.value - buffer, balanceData.decimals);
-        } else {
-          amount = "0";
-        }
-      }
-
-      onRequote(amount, quote);
-    } finally {
-      setIsMaxLoading(false);
-    }
-  };
 
   const handleConfirm = async () => {
     if (!quote) {
@@ -199,7 +176,7 @@ export default function SwapConfirmation({ quote, confidence = 100, onAmountChan
     try {
       const balance = await publicClient.getBalance({ address });
       const balanceFormatted = formatEther(balance);
-      setWalletBalance(balanceFormatted);
+      // setWalletBalance(balanceFormatted);
 
       // Call the callback to update the parent component with the max amount
       if (onAmountChange) {

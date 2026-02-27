@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { fetchMarketSentiment, generateTradingSignal, MarketSentiment, TradingSignal } from "@/lib/market-sentiment";
-import { getFearGreedEmoji, getFearGreedLabel, getFearGreedColor } from "@/lib/fear-greed";
-import SentimentDetailsModal from "@/components/SentimentDetailsModal";
+import { fetchMarketSentiment } from "@/lib/market-sentiment";
 import Link from "next/link";
 
 export default function MarketSentimentWidget() {
