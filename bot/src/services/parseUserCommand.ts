@@ -45,6 +45,12 @@ const REGEX_TRAILING_STOP = /(?:trailing\s+stop|stop\s+loss|protect\s+profit|tra
 const REGEX_TRAILING_PERCENTAGE = /(\d+(\.\d+)?)\s*(?:%|percent)\s*(?:trailing|stop|drop|decline|fall)/i;
 const REGEX_TRAILING_AMOUNT = /(?:trailing\s+stop|stop\s+loss)\s+(?:at\s+)?(\d+(\.\d+)?)\s*(?:%|percent)/i;
 
+// New Regex for Portfolio Rebalancing
+const REGEX_PORTFOLIO_REBALANCE = /(?:rebalance|re-?balanc(?:e|ing)|balance\s+(?:my\s+)?portfolio|set\s+portfolio|portfolio\s+target|allocate)/i;
+const REGEX_PORTFOLIO_DRIFT = /drift\s+(?:threshold|limit)?\s*(\d+(?:\.\d+)?)\s*%/i;
+const REGEX_PORTFOLIO_AUTO = /(?:auto(?:matic)?|automatically)\s*(?:rebalance|trade)/i;
+const REGEX_ASSET_PERCENTAGE = /([A-Z]{2,5})\s+(?:=|:|to|at|target)?\s*(\d+(?:\.\d+)?)\s*%/gi;
+
 
 function normalizeNumber(val: string): number {
   val = val.toLowerCase().replace(/[\$,]/g, '');
@@ -143,6 +149,77 @@ export async function parseUserCommand(
       confidence: 85,
       validationErrors: [],
       parsedMessage: `Parsed: Trailing stop order - Sell ${amount || '?'} ${fromAsset || '?'} if price drops ${trailingPercentage}% from peak`,
+      requiresConfirmation: true,
+      originalInput: userInput
+    };
+  }
+
+  // Check for Portfolio Rebalancing Intent
+  if (REGEX_PORTFOLIO_REBALANCE.test(input)) {
+    const assets: { coin: string; percentage: number }[] = [];
+    const assetMatches = input.matchAll(REGEX_ASSET_PERCENTAGE);
+    for (const match of assetMatches) {
+      const coin = match[1].toUpperCase();
+      const percentage = parseFloat(match[2]);
+      if (coin && percentage > 0) {
+        assets.push({ coin, percentage });
+      }
+    }
+
+    let driftThreshold = 5.0;
+    const driftMatch = input.match(REGEX_PORTFOLIO_DRIFT);
+    if (driftMatch) {
+      driftThreshold = parseFloat(driftMatch[1]);
+    }
+
+    const autoRebalance = REGEX_PORTFOLIO_AUTO.test(input);
+
+    let portfolioName = 'My Portfolio';
+    if (input.includes('conservative')) portfolioName = 'Conservative Portfolio';
+    else if (input.includes('balanced')) portfolioName = 'Balanced Portfolio';
+    else if (input.includes('growth')) portfolioName = 'Growth Portfolio';
+    else if (input.includes('aggressive')) portfolioName = 'Aggressive Portfolio';
+
+    return {
+      success: true,
+      intent: 'portfolio',
+      fromAsset: null,
+      fromChain: null,
+      toAsset: null,
+      toChain: null,
+      amount: null,
+      amountType: null,
+      excludeAmount: undefined,
+      excludeToken: undefined,
+      quoteAmount: undefined,
+      conditions: undefined,
+      portfolio: assets.map(a => ({
+        toAsset: a.coin,
+        toChain: 'ethereum',
+        percentage: a.percentage
+      })),
+      driftThreshold,
+      autoRebalance,
+      portfolioName,
+      frequency: null,
+      dayOfWeek: null,
+      dayOfMonth: null,
+      settleAsset: null,
+      settleNetwork: null,
+      settleAmount: null,
+      settleAddress: null,
+      fromProject: null,
+      fromYield: null,
+      toProject: null,
+      toYield: null,
+      conditionOperator: undefined,
+      conditionValue: undefined,
+      conditionAsset: undefined,
+      targetPrice: undefined,
+      condition: undefined,
+      confidence: assets.length > 0 ? 90 : 70,
+      validationErrors: assets.length === 0 ? ['No asset allocations found'] : [],
+      parsedMessage: `Parsed: Portfolio rebalancing - ${assets.map(a => `${a.coin}: ${a.percentage}%`).join(', ')}, ${driftThreshold}% drift threshold, ${autoRebalance ? 'auto' : 'manual'}`,
       requiresConfirmation: true,
       originalInput: userInput
     };

@@ -482,3 +482,57 @@ export const planPurchasesRelations = relations(planPurchases, ({one}) => ({
     references: [users.id],
   }),
 }));
+
+// --- PORTFOLIO REBALANCING SCHEMAS ---
+
+export const portfolioTargets = pgTable('portfolio_targets', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  name: text('name').notNull(), // e.g., "Conservative", "Balanced", "Aggressive"
+  assets: jsonb('assets').notNull(), // Array of { coin, network, targetPercentage }
+  driftThreshold: real('drift_threshold').notNull().default(5.0), // Default 5% drift threshold
+  isActive: boolean('is_active').notNull().default(true),
+  autoRebalance: boolean('auto_rebalance').notNull().default(false), // Auto rebalance when threshold exceeded
+  lastRebalancedAt: timestamp('last_rebalanced_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index("idx_portfolio_targets_user_id").on(table.userId),
+  index("idx_portfolio_targets_telegram_id").on(table.telegramId),
+  index("idx_portfolio_targets_is_active").on(table.isActive),
+]);
+
+export const rebalanceHistory = pgTable('rebalance_history', {
+  id: serial('id').primaryKey(),
+  portfolioTargetId: integer('portfolio_target_id').notNull().references(() => portfolioTargets.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  triggerType: text('trigger_type').notNull(), // 'manual' | 'auto' | 'threshold'
+  totalPortfolioValue: numeric('total_portfolio_value', { precision: 20, scale: 8 }).notNull(),
+  swapsExecuted: jsonb('swaps_executed').notNull(), // Array of { fromAsset, toAsset, fromAmount, toAmount, sideshiftOrderId }
+  totalFees: numeric('total_fees', { precision: 20, scale: 8 }).notNull().default('0'),
+  status: text('status').notNull().default('pending'), // 'pending' | 'completed' | 'failed' | 'partial'
+  errorMessage: text('error_message'),
+  startedAt: timestamp('started_at').defaultNow(),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_rebalance_history_user_id").on(table.userId),
+  index("idx_rebalance_history_portfolio_target_id").on(table.portfolioTargetId),
+  index("idx_rebalance_history_status").on(table.status),
+  index("idx_rebalance_history_created_at").on(table.createdAt),
+]);
+
+// --- RELATIONS ---
+
+export const portfolioTargetsRelations = relations(portfolioTargets, ({many}) => ({
+  rebalanceHistory: many(rebalanceHistory),
+}));
+
+export const rebalanceHistoryRelations = relations(rebalanceHistory, ({one}) => ({
+  portfolioTarget: one(portfolioTargets, {
+    fields: [rebalanceHistory.portfolioTargetId],
+    references: [portfolioTargets.id],
+  }),
+}));
