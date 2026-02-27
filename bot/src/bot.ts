@@ -255,49 +255,6 @@ async function handleTextMessage(
     );
   }
 
-  /* ---------------- Limit Order ---------------- */
-
-  if (parsed.intent === 'limit_order') {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
-    }
-
-    await db.setConversationState(userId, { parsedCommand: parsed });
-
-    return ctx.reply(
-      'Confirm Limit Order?',
-      Markup.inlineKeyboard([
-        Markup.button.callback('✅ Yes', 'confirm_limit_order'),
-        Markup.button.callback('❌ Cancel', 'cancel_swap'),
-      ])
-    );
-  }
-
-  /* ---------------- Swap/Checkout ---------------- */
-
-  if (['swap', 'checkout'].includes(parsed.intent)) {
-    if (!parsed.settleAddress) {
-      await db.setConversationState(userId, { parsedCommand: parsed });
-      return ctx.reply('Please provide the destination wallet address.');
-    }
-
-    await db.setConversationState(userId, { parsedCommand: parsed });
-
-    return ctx.reply(
-      'Confirm parameters?',
-      Markup.inlineKeyboard([
-        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
-        Markup.button.callback('❌ Cancel', 'cancel_swap'),
-      ])
-    );
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* ACTIONS                                                                    */
-/* -------------------------------------------------------------------------- */
-
 bot.action(/deposit_(.+)/, async (ctx) => {
 
   const poolId = ctx.match[1];
@@ -306,38 +263,39 @@ bot.action(/deposit_(.+)/, async (ctx) => {
   ctx.reply(`🚀 Starting deposit flow for pool: ${poolId}`);
 });
 
+
 bot.action('place_order', async (ctx) => {
-    if (!ctx.from) return;
-    const state = await db.getConversationState(ctx.from.id);
+  const state = await db.getConversationState(ctx.from.id);
+  if (!state?.quoteId) return;
 
-    if (!state?.quoteId || !state.parsedCommand?.settleAddress) {
-        return ctx.answerCbQuery('Session missing required data. Start over.');
+  const order = await createOrder(
+    state.quoteId,
+    state.parsedCommand.settleAddress,
+    state.parsedCommand.settleAddress
+  );
+
+  await db.createOrderEntry(
+    ctx.from.id,
+    state.parsedCommand,
+    order,
+    state.settleAmount,
+    state.quoteId
+  );
+
+  await db.addWatchedOrder(ctx.from.id, order.id, 'pending');
+
+  ctx.editMessageText(
+    `✅ *Order Created*\n\nSign transaction to complete.`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        Markup.button.webApp(
+          '📱 Sign Transaction',
+          `${MINI_APP_URL}?to=${order.depositAddress}`
+        ),
+      ]),
     }
-
-    const userId = ctx.from.id;
-    const settleAddress = state.parsedCommand.settleAddress;
-
-    try {
-        const order = await createOrder(state.quoteId, settleAddress, settleAddress);
-        if (!order.id) throw new Error("Failed to create order");
-
-        db.createOrderEntry(userId, state.parsedCommand, order, order.settleAmount, state.quoteId);
-
-        const msg =
-            `✅ *Order Created!* (ID: \`${order.id}\`)\n\n` +
-            `To complete the swap, please send funds to the address below:\n\n` +
-            `🏦 *Deposit:* \`${(order.depositAddress as { address: string; memo: string; }).address || order.depositAddress}\`\n` +
-            `💰 *Amount:* ${order.depositAmount} ${order.depositCoin}\n` +
-            ((order.depositAddress as { address: string; memo: string; }).memo ? `📝 *Memo:* \`${(order.depositAddress as { address: string; memo: string; }).memo || ''}\`\n` : '') +
-            `\n_Destination: ${settleAddress}_`;
-
-        ctx.editMessageText(msg, { parse_mode: 'Markdown' });
-    } catch (error) {
-        console.error(error);
-        ctx.editMessageText(`❌ Error creating order.`);
-    } finally {
-        db.clearConversationState(userId);
-    }
+  );
 });
 
 bot.action('confirm_checkout', async (ctx) => {
@@ -401,6 +359,47 @@ bot.action('confirm_portfolio', async (ctx) => {
   }
 });
 
+  if (parsed.intent === 'limit_order') {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply('Please provide the destination wallet address.');
+    }
+  } catch (error) {
+    handleError('PortfolioExecutionFailed', error, ctx);
+    ctx.editMessageText('❌ Failed to execute portfolio strategy.');
+  } finally {
+    await db.clearConversationState(userId);
+  }
+});
+
+  if (['swap', 'checkout'].includes(parsed.intent)) {
+    if (!parsed.settleAddress) {
+      await db.setConversationState(userId, { parsedCommand: parsed });
+      return ctx.reply('Please provide the destination wallet address.');
+    }
+
+    await db.setConversationState(userId, { parsedCommand: parsed });
+
+    return ctx.reply(
+      'Confirm parameters?',
+      Markup.inlineKeyboard([
+        Markup.button.callback('✅ Yes', `confirm_${parsed.intent}`),
+        Markup.button.callback('❌ Cancel', 'cancel_swap'),
+      ])
+    );
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* ACTIONS                                                                    */
+/* -------------------------------------------------------------------------- */
+
+bot.action('cancel_swap', async (ctx) => {
+  if (!ctx.from) return;
+  await db.clearConversationState(ctx.from.id);
+  ctx.editMessageText('❌ Cancelled');
+});
+
 bot.action('confirm_limit_order', async (ctx) => {
   const userId = ctx.from.id;
   const state = await db.getConversationState(userId);
@@ -417,16 +416,10 @@ bot.action('confirm_limit_order', async (ctx) => {
   }
 });
 
-
-bot.action('cancel_swap', async (ctx) => {
-  if (!ctx.from) return;
-  await db.clearConversationState(ctx.from.id);
-  ctx.editMessageText('❌ Cancelled');
-});
-
 /* -------------------------------------------------------------------------- */
 /* STARTUP                                                                    */
 /* -------------------------------------------------------------------------- */
+
 const dcaScheduler = new DCAScheduler();
 
 async function start() {
@@ -469,6 +462,5 @@ async function start() {
     process.exit(1);
   }
 }
-
 
 start();

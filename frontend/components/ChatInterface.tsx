@@ -9,7 +9,7 @@ import TrustIndicators from './TrustIndicators';
 import IntentConfirmation from './IntentConfirmation';
 import GasFeeDisplay from './GasFeeDisplay';
 import GasComparisonChart from './GasComparisonChart';
-import type { ParsedCommand } from '@/utils/groq-client';
+import { ParsedCommand } from '@/utils/groq-client';
 import { useErrorHandler, ErrorType } from '@/hooks/useErrorHandler';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAuth } from '@/hooks/useAuth';
@@ -34,10 +34,10 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  type?: 'message' | 'intent_confirmation' | 'swap_confirmation' | 'yield_info' | 'checkout_link';
-  data?: {
-    parsedCommand?: ParsedCommand;
-    quoteData?: QuoteData;
+  type?: 'message' | 'intent_confirmation' | 'swap_confirmation' | 'yield_info' | 'checkout_link' | 'portfolio_summary';
+  data?: { 
+    parsedCommand?: ParsedCommand; 
+    quoteData?: QuoteData; 
     confidence?: number;
     url?: string;
     portfolioItems?: PortfolioItem[];
@@ -77,22 +77,22 @@ export default function ChatInterface() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [pendingCommand, setPendingCommand] = useState<ParsedCommand | null>(null);
-  const [currentConfidence, setCurrentConfidence] = useState(0);
-
+  const [currentConfidence, setCurrentConfidence] = useState<number | undefined>(undefined);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const hasLoadedPersistenceRef = useRef(false);
-  const saveSequenceRef = useRef(0);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { address, isConnected } = useAccount();
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { handleError } = useErrorHandler();
-
-  const {
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoadedPersistenceRef = useRef(false);
+  const saveSequenceRef = useRef(0);
+  
+  // Use cross-browser audio recorder
+  const { 
     isRecording,
-    isSupported: isAudioSupported,
-    startRecording,
-    stopRecording,
+    isSupported: isAudioSupported, 
+    startRecording, 
+    stopRecording, 
     error: audioError
   } = useAudioRecorder();
 
@@ -256,7 +256,6 @@ export default function ChatInterface() {
   useEffect(() => {
     if (audioError) {
       addMessage({ role: 'assistant', content: audioError, type: 'message' });
-      inputRef.current?.focus();
     }
   }, [audioError]);
 
@@ -272,114 +271,103 @@ export default function ChatInterface() {
     setMessages(prev => [...prev, { ...message, timestamp: new Date() }]);
   };
 
-  // Voice recording handlers
-  const handleStartRecording = async () => {
-    if (!isAudioSupported) {
-      addMessage({
-        role: 'assistant',
-        content: `Voice input is not supported in this browser. Please use text input instead.`,
-        type: 'message'
-      });
-      inputRef.current?.focus();
-      return;
-    }
 
-    try {
-      await startRecording();
-    } catch (err) {
-      const errorMessage = handleError(err, ErrorType.VOICE_ERROR, {
-        operation: 'microphone_access',
-        retryable: true
-      });
-      addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
-      inputRef.current?.focus();
-    }
-  };
-
-  const handleStopRecording = async () => {
-    try {
-      const result = await stopRecording();
-      if (result) {
-        if (typeof result === 'string') {
-          // Direct text from SpeechRecognition fallback
-          addMessage({ role: 'user', content: `🎤 "${result}"`, type: 'message' });
-          await processCommand(result);
-        } else {
-          // Audio blob from MediaRecorder
-          await handleVoiceInput(result);
-        }
-      }
-    } catch (err) {
-      const errorMessage = handleError(err, ErrorType.VOICE_ERROR, {
-        operation: 'stop_recording',
-        retryable: true
-      });
-      addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
-      inputRef.current?.focus();
-    }
-  };
-
-  const handleVoiceInput = async (audioBlob: Blob) => {
-    setIsLoading(true);
-    addMessage({ role: 'user', content: '🎤 [Sending Voice...]', type: 'message' });
-
-    const formData = new FormData();
-
-    // Determine file extension based on blob type and browser
-    let fileName = 'voice.webm';
-    if (audioBlob.type.includes('mp4')) {
-      fileName = 'voice.mp4';
-    } else if (audioBlob.type.includes('wav')) {
-      fileName = 'voice.wav';
-    } else if (audioBlob.type.includes('ogg')) {
-      fileName = 'voice.ogg';
-    }
-
-    formData.append('file', audioBlob, fileName);
-
-    try {
-      const response = await fetch('/api/transcribe', {
+  const executeSwapAsync = async (
+    fromAsset: string, 
+    toAsset: string, 
+    amount: number, 
+    fromChain: string, 
+    toChain: string
+  ): Promise<QuoteData> => {
+     const quoteResponse = await fetch('/api/create-swap', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromAsset, toAsset, amount, fromChain, toChain }),
       });
+      const quote = await quoteResponse.json();
+      if (quote.error) throw new Error(quote.error);
+      return quote;
+  };
 
-      if (!response.ok) throw new Error('Transcription failed');
+  const handlePortfolioRetry = (failedItems: PortfolioItem[], originalCommand: ParsedCommand) => {
+      // 1. Reset failed items to pending in UI
+      setMessages(prev => {
+        const msgIndex = prev.findLastIndex(m => m.type === 'portfolio_summary');
+        if (msgIndex === -1) return prev;
+        
+        const msg = prev[msgIndex];
+        if (!msg.data?.portfolioItems) return prev;
 
-      const data = await response.json();
-
-      if (data.text) {
-        setMessages(prev => {
-          const newMsgs = [...prev];
-          const lastIndex = newMsgs.length - 1;
-          if (lastIndex >= 0 && newMsgs[lastIndex].content === '🎤 [Sending Voice...]') {
-            newMsgs[lastIndex] = {
-              ...newMsgs[lastIndex],
-              content: `🎤 "${data.text}"`
-            };
-          }
-          return newMsgs;
+        const newItems = msg.data.portfolioItems.map(item => {
+            if (failedItems.some(f => f.id === item.id)) {
+                return { ...item, status: 'pending' as const, error: undefined };
+            }
+            return item;
         });
 
-        await processCommand(data.text);
-      } else {
-        addMessage({ role: 'assistant', content: "I couldn't hear anything clearly.", type: 'message' });
-        setIsLoading(false);
-      }
-
-    } catch (error) {
-      const errorMessage = handleError(error, ErrorType.VOICE_ERROR, {
-        operation: 'voice_transcription',
-        retryable: true
+        const newMsg = { ...msg, data: { ...msg.data, portfolioItems: newItems } };
+        const newMessages = [...prev];
+        newMessages[msgIndex] = newMsg;
+        return newMessages;
       });
-      setMessages(prev => prev.filter(m => m.content !== '🎤 [Sending Voice...]'));
-      addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
-      setIsLoading(false);
-      inputRef.current?.focus();
-    }
+
+      // 2. Trigger execution
+      processPortfolioBatch(failedItems, originalCommand);
+  };
+
+  const processPortfolioBatch = async (itemsToProcess: PortfolioItem[], command: ParsedCommand) => {
+      for (const item of itemsToProcess) {
+          try {
+             const fromChain = command.fromChain || 'ethereum';
+             const toChain = item.toChain || command.toChain || 'ethereum';
+
+             const quote = await executeSwapAsync(
+                 item.fromAsset,
+                 item.toAsset,
+                 item.amount,
+                 fromChain,
+                 toChain
+             );
+             
+             // Update Success
+             setMessages(prev => {
+                 const msgIndex = prev.findLastIndex(m => m.type === 'portfolio_summary');
+                 if (msgIndex === -1) return prev;
+                 const msg = prev[msgIndex];
+                 if (!msg.data?.portfolioItems) return prev;
+                 
+                 const newItems = msg.data.portfolioItems.map(i => 
+                     i.id === item.id ? { ...i, status: 'success' as const, quote } : i
+                 );
+                 
+                 const newMessages = [...prev];
+                 newMessages[msgIndex] = { ...msg, data: { ...msg.data, portfolioItems: newItems } };
+                 return newMessages;
+             });
+
+          } catch (error: unknown) {
+             const errorMessage = error instanceof Error ? error.message : "Unknown error";
+             // Update Error
+             setMessages(prev => {
+                 const msgIndex = prev.findLastIndex(m => m.type === 'portfolio_summary');
+                 if (msgIndex === -1) return prev;
+                 const msg = prev[msgIndex];
+                 if (!msg.data?.portfolioItems) return prev;
+                 
+                 const newItems = msg.data.portfolioItems.map(i => 
+                     i.id === item.id ? { ...i, status: 'error' as const, error: errorMessage } : i
+                 );
+                 
+                 const newMessages = [...prev];
+                 newMessages[msgIndex] = { ...msg, data: { ...msg.data, portfolioItems: newItems } };
+                 return newMessages;
+             });
+          }
+      }
   };
 
   const processCommand = async (text: string) => {
-    if (!isLoading) setIsLoading(true);
+    if(!isLoading) setIsLoading(true); 
 
     try {
       const response = await fetch('/api/parse-command', {
@@ -387,9 +375,9 @@ export default function ChatInterface() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
       });
-
+      
       const command: ParsedCommand = await response.json();
-
+      
       if (!command.success && command.intent !== 'yield_scout') {
         addMessage({
           role: 'assistant',
@@ -409,7 +397,7 @@ export default function ChatInterface() {
         const yieldData = await yieldRes.json();
         addMessage({
           role: 'assistant',
-          content: yieldData.message,
+          content: yieldData.message, 
           type: 'yield_info'
         });
         setIsLoading(false);
@@ -419,39 +407,39 @@ export default function ChatInterface() {
       // Handle Checkout (Payment Links)
       if (command.intent === 'checkout') {
         let finalAddress = command.settleAddress;
-
+        
         if (!finalAddress) {
-          if (!isConnected || !address) {
-            addMessage({
-              role: 'assistant',
-              content: "To create a receive link for yourself, please connect your wallet first.",
-              type: 'message'
-            });
-            setIsLoading(false);
-            return;
-          }
-          finalAddress = address;
+            if (!isConnected || !address) {
+                addMessage({
+                    role: 'assistant',
+                    content: "To create a receive link for yourself, please connect your wallet first.",
+                    type: 'message'
+                });
+                setIsLoading(false);
+                return;
+            }
+            finalAddress = address;
         }
 
         const checkoutRes = await fetch('/api/create-checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            settleAsset: command.settleAsset,
-            settleNetwork: command.settleNetwork,
-            settleAmount: command.settleAmount,
-            settleAddress: finalAddress
-          })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                settleAsset: command.settleAsset,
+                settleNetwork: command.settleNetwork,
+                settleAmount: command.settleAmount,
+                settleAddress: finalAddress 
+            })
         });
         const checkoutData = await checkoutRes.json();
-
+        
         if (checkoutData.error) throw new Error(checkoutData.error);
 
         addMessage({
-          role: 'assistant',
-          content: `Payment Link Created for ${checkoutData.settleAmount} ${checkoutData.settleCoin} on ${command.settleNetwork}`,
-          type: 'checkout_link',
-          data: { url: checkoutData.url }
+            role: 'assistant',
+            content: `Payment Link Created for ${checkoutData.settleAmount} ${checkoutData.settleCoin} on ${command.settleNetwork}`,
+            type: 'checkout_link',
+            data: { url: checkoutData.url }
         });
         setIsLoading(false);
         return;
@@ -459,29 +447,34 @@ export default function ChatInterface() {
 
       // Handle Portfolio
       if (command.intent === 'portfolio' && command.portfolio) {
-        addMessage({
-          role: 'assistant',
-          content: `📊 **Portfolio Strategy Detected**\nSplitting ${command.amount} ${command.fromAsset} into multiple assets. Generating orders...`,
-          type: 'message'
-        });
+         if (command.requiresConfirmation || command.confidence < 80) {
+             setPendingCommand(command);
+             addMessage({ role: 'assistant', content: '', type: 'intent_confirmation', data: { parsedCommand: command } });
+             setIsLoading(false);
+             return;
+         }
 
-        for (const item of command.portfolio) {
-          const splitAmount = (command.amount! * item.percentage) / 100;
-          const subCommand: ParsedCommand = {
-            ...command,
-            intent: 'swap',
-            amount: splitAmount,
-            toAsset: item.toAsset,
-            toChain: item.toChain,
-            portfolio: undefined,
-            confidence: 100
-          };
+         // Prepare Portfolio Items
+         const items: PortfolioItem[] = command.portfolio.map((item, index) => ({
+             id: `${item.toAsset}-${index}`,
+             fromAsset: command.fromAsset || 'ETH',
+             toAsset: item.toAsset,
+             amount: (command.amount! * item.percentage) / 100,
+             status: 'pending',
+             toChain: item.toChain 
+         }));
 
-          await executeSwap(subCommand);
-        }
+         addMessage({ 
+             role: 'assistant', 
+             content: `📊 **Portfolio Strategy Detected**\nSplitting ${command.amount} ${command.fromAsset}...`, 
+             type: 'portfolio_summary',
+             data: { portfolioItems: items, parsedCommand: command } 
+         });
 
-        setIsLoading(false);
-        return;
+         await processPortfolioBatch(items, command);
+         
+         setIsLoading(false);
+         return;
       }
 
       // Handle DCA (Dollar Cost Averaging)
@@ -515,11 +508,11 @@ export default function ChatInterface() {
       } else {
         await executeSwap(command);
       }
-
+      
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'command_processing',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     } finally {
@@ -548,10 +541,10 @@ export default function ChatInterface() {
           toChain: command.toChain
         }),
       });
-
+      
       const quote = await quoteResponse.json();
       if (quote.error) throw new Error(quote.error);
-
+      
       addMessage({
         role: 'assistant',
         content: `Swap Prepared: ${quote.depositAmount} ${quote.depositCoin} → ${quote.settleAmount} ${quote.settleCoin}`,
@@ -559,9 +552,9 @@ export default function ChatInterface() {
         data: { quoteData: quote, confidence: command.confidence }
       });
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'swap_quote',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     }
@@ -584,19 +577,19 @@ export default function ChatInterface() {
           settleAddress: address // Use connected wallet address
         }),
       });
-
+      
       const result = await dcaResponse.json();
       if (result.error) throw new Error(result.error);
-
+      
       addMessage({
         role: 'assistant',
         content: `✅ DCA Schedule Created!\n\n📊 Details:\n• ${command.amount} ${command.fromAsset} → ${command.toAsset}\n• Frequency: ${command.frequency}\n${command.dayOfWeek ? `• Day: ${command.dayOfWeek}` : ''}\n${command.dayOfMonth ? `• Date: ${command.dayOfMonth}` : ''}\n\nYour recurring swap is now active!`,
         type: 'message'
       });
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'dca_creation',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     }
@@ -619,10 +612,10 @@ export default function ChatInterface() {
           settleAddress: address // Use connected wallet address
         }),
       });
-
+      
       const result = await limitOrderResponse.json();
       if (result.error) throw new Error(result.error);
-
+      
       const operatorText = command.conditionOperator === 'gt' ? 'above' : 'below';
       addMessage({
         role: 'assistant',
@@ -630,9 +623,9 @@ export default function ChatInterface() {
         type: 'message'
       });
     } catch (error: unknown) {
-      const errorMessage = handleError(error, ErrorType.API_FAILURE, {
+      const errorMessage = handleError(error, ErrorType.API_FAILURE, { 
         operation: 'limit_order_creation',
-        retryable: true
+        retryable: true 
       });
       addMessage({ role: 'assistant', content: errorMessage, type: 'message' });
     }
@@ -640,67 +633,85 @@ export default function ChatInterface() {
 
   const handleIntentConfirm = async (confirmed: boolean) => {
     if (confirmed && pendingCommand) {
-      if (pendingCommand.intent === 'portfolio') {
-        const confirmedCmd = { ...pendingCommand, requiresConfirmation: false, confidence: 100 };
-        addMessage({ role: 'assistant', content: "Executing Portfolio Strategy...", type: 'message' });
+        if (pendingCommand.intent === 'portfolio') {
+             const confirmedCmd = { ...pendingCommand, requiresConfirmation: false, confidence: 100 };
+             
+             if (confirmedCmd.portfolio) {
+                 const items: PortfolioItem[] = confirmedCmd.portfolio.map((item, index) => ({
+                     id: `${item.toAsset}-${index}`,
+                     fromAsset: confirmedCmd.fromAsset || 'ETH',
+                     toAsset: item.toAsset,
+                     amount: (confirmedCmd.amount! * item.percentage) / 100,
+                     status: 'pending',
+                     toChain: item.toChain 
+                 }));
 
-        if (confirmedCmd.portfolio) {
-          for (const item of confirmedCmd.portfolio) {
-            const splitAmount = (confirmedCmd.amount! * item.percentage) / 100;
-            await executeSwap({
-              ...confirmedCmd,
-              intent: 'swap',
-              amount: splitAmount,
-              toAsset: item.toAsset,
-              toChain: item.toChain
-            });
-          }
+                 addMessage({ 
+                     role: 'assistant', 
+                     content: `📊 **Portfolio Strategy Executing**\nSplitting ${confirmedCmd.amount} ${confirmedCmd.fromAsset}...`, 
+                     type: 'portfolio_summary',
+                     data: { portfolioItems: items, parsedCommand: confirmedCmd } 
+                 });
+
+                 await processPortfolioBatch(items, confirmedCmd);
+             }
+        } else if (pendingCommand.intent === 'dca') {
+             await executeDCA(pendingCommand);
+        } else if (pendingCommand.conditionOperator && pendingCommand.conditionValue) {
+             // Limit Order (swap with conditions)
+             await executeLimitOrder(pendingCommand);
+        } else {
+            await executeSwap(pendingCommand);
         }
-      } else if (pendingCommand.intent === 'dca') {
-        await executeDCA(pendingCommand);
-      } else if (pendingCommand.conditionOperator && pendingCommand.conditionValue) {
-        // Limit Order (swap with conditions)
-        await executeLimitOrder(pendingCommand);
-      } else {
-        await executeSwap(pendingCommand);
-      }
     } else if (!confirmed) {
-      addMessage({ role: 'assistant', content: 'Cancelled.', type: 'message' });
+        addMessage({ role: 'assistant', content: 'Cancelled.', type: 'message' });
     }
     setPendingCommand(null);
   };
 
-  const handleRequote = async (newAmount: string, oldQuote: QuoteData) => {
-    const command: ParsedCommand = {
-      intent: 'swap',
-      fromAsset: oldQuote.depositCoin,
-      toAsset: oldQuote.settleCoin,
-      amount: parseFloat(newAmount),
-      fromChain: oldQuote.depositNetwork,
-      toChain: oldQuote.settleNetwork,
-      confidence: 100, // High confidence as it comes from a button click
-      requiresConfirmation: false,
-      success: true,
-      validationErrors: [],
-      settleAsset: oldQuote.depositCoin,
-      settleNetwork: oldQuote.depositNetwork,
-      settleAmount: oldQuote.settleAmount,
-      settleAddress: '',
-      parsedMessage: ''
-    };
+  const handleVoiceRecording = async () => {
+    if (isRecording) {
+      setIsLoading(true);
+      try {
+        const audioBlob = await stopRecording();
+        if (audioBlob) {
+            const audioFile = new File([audioBlob], "voice_command.wav", { type: audioBlob.type || 'audio/wav' });
+            
+            const formData = new FormData();
+            formData.append('file', audioFile);
 
-    addMessage({
-      role: 'user',
-      content: `🔄 Updating swap amount to ${newAmount} ${oldQuote.depositCoin}...`,
-      type: 'message'
-    });
+            const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData
+            });
 
-    await executeSwap(command);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+
+            if (data.text) {
+                addMessage({ role: 'user', content: data.text, type: 'message' });
+                processCommand(data.text);
+            }
+        }
+      } catch (err) {
+        console.error("Voice processing failed:", err);
+        addMessage({ 
+            role: 'assistant', 
+            content: "Sorry, I couldn't process your voice command. Please try again.", 
+            type: 'message' 
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      await startRecording();
+    }
   };
 
-  return (
+return (
     <div className="flex flex-col h-[700px] bg-[#0B0E11] border border-white/10 rounded-3xl overflow-hidden shadow-2xl relative">
-
+      
       {/* 1. Header / Status Bar */}
       <div className="px-6 py-4 bg-white/[0.02] border-b border-white/5 flex justify-between items-center backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -723,18 +734,29 @@ export default function ChatInterface() {
         {messages.map((msg, index) => (
           <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
             <div className={`max-w-[85%] ${msg.role === 'user' ? 'order-1' : 'order-2'}`}>
-
+              
               {msg.role === 'user' ? (
                 <div className="bg-blue-600 text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-lg shadow-blue-600/20 text-sm font-medium">
                   {msg.content}
                 </div>
               ) : (
-
+                
                 <div className="space-y-3">
                   <div className="bg-white/[0.04] border border-white/10 text-gray-200 px-5 py-4 rounded-2xl rounded-tl-none text-sm leading-relaxed backdrop-blur-sm">
                     {msg.type === 'message' && <div className="whitespace-pre-line">{msg.content}</div>}
+                    {msg.type === 'portfolio_summary' && (
+                        <div>
+                          <div className="whitespace-pre-line mb-3">{msg.content}</div>
+                          {msg.data?.portfolioItems && msg.data?.parsedCommand && (
+                            <PortfolioSummary 
+                                items={msg.data.portfolioItems} 
+                                onRetry={(failedItems) => handlePortfolioRetry(failedItems, msg.data!.parsedCommand!)} 
+                            />
+                          )}
+                        </div>
+                    )}
                     {msg.type === 'yield_info' && <div className="font-mono text-xs text-blue-300">{msg.content}</div>}
-
+                    
                     {/* Inject your Custom Components (SwapConfirmation etc) here */}
                     {msg.type === 'intent_confirmation' && <IntentConfirmation command={msg.data?.parsedCommand} onConfirm={handleIntentConfirm} />}
                     {msg.type === 'swap_confirmation' && msg.data?.quoteData && (
@@ -784,7 +806,7 @@ export default function ChatInterface() {
                   </div>
                 </div>
               )}
-
+              
               <p className={`text-[10px] text-gray-500 mt-2 px-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                 {formatTime(msg.timestamp)}
               </p>
@@ -799,26 +821,20 @@ export default function ChatInterface() {
         <div className="relative group transition-all duration-300">
           {/* Subtle glow effect on focus */}
           <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500" />
-
+          
           <div className="relative flex items-center gap-3 bg-[#161A1E] border border-white/10 p-2 rounded-2xl group-focus-within:border-blue-500/50 transition-all">
-            <button
-              onClick={() => {
-                if (isRecording) {
-                  handleStopRecording();
-                } else {
-                  handleStartRecording();
-                }
-              }}
+            <button 
+              onClick={handleVoiceRecording}
               disabled={!isAudioSupported}
-              className={`p-3 rounded-xl transition-all ${!isAudioSupported ? 'bg-white/5 text-gray-600 cursor-not-allowed' :
+              className={`p-3 rounded-xl transition-all ${
+                !isAudioSupported ? 'bg-white/5 text-gray-600 cursor-not-allowed' :
                 isRecording ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
+              }`}
             >
               {isRecording ? <StopCircle className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
-
+            
             <input
-              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -826,10 +842,10 @@ export default function ChatInterface() {
               placeholder="Send a command (e.g., 'Swap 1 ETH to USDC')"
               className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-white placeholder:text-gray-500 py-3"
             />
-
+            
             <div className="flex items-center gap-2 pr-2">
-              <button
-                onClick={handleSend}
+              <button 
+                onClick={handleSend} 
                 disabled={isLoading || !input.trim()}
                 className="p-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-20 text-white rounded-xl transition-all shadow-lg shadow-blue-600/20"
               >
@@ -838,6 +854,13 @@ export default function ChatInterface() {
             </div>
           </div>
         </div>
+        
+        {/* Voice Fallback */}
+        {!isAudioSupported && (
+            <div className="text-red-500 text-xs mt-2 px-1 text-center font-medium">
+                🎤 Voice input is not supported in your browser. Please use Chrome or type your command.
+            </div>
+        )}
 
         {/* Footer Warning */}
         {!isConnected && (
