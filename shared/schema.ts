@@ -53,6 +53,93 @@ export const conversations = pgTable('conversations', {
   index("idx_conversations_telegram_id").on(table.telegramId),
 ]);
 
+export const traderStats = pgTable('trader_stats', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  totalTrades: integer('total_trades').notNull().default(0),
+  successfulTrades: integer('successful_trades').notNull().default(0),
+  totalVolumeUSD: text('total_volume_usd').notNull().default('0'),
+  followerCount: integer('follower_count').notNull().default(0),
+  totalCopies: integer('total_copies').notNull().default(0),
+  averageReturn: real('average_return').notNull().default(0),
+  winRate: real('win_rate').notNull().default(0),
+  reputationScore: real('reputation_score').notNull().default(0),
+  lastUpdated: timestamp('last_updated').defaultNow(),
+}, (table) => [
+  index("idx_trader_stats_user_id").on(table.userId),
+]);
+
+export const followedTraders = pgTable('followed_traders', {
+  id: serial('id').primaryKey(),
+  followerId: integer('follower_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  traderId: integer('trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  notifyOnPortfolioChange: boolean('notify_on_portfolio_change').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_followed_traders_follower_id").on(table.followerId),
+  index("idx_followed_traders_trader_id").on(table.traderId),
+]);
+
+export const sharedPortfolios = pgTable('shared_portfolios', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  shareCode: text('share_code').notNull().unique(),
+  title: text('title').notNull(),
+  description: text('description'),
+  fromAsset: text('from_asset').notNull(),
+  fromChain: text('from_chain'),
+  portfolio: jsonb('portfolio').notNull(), // Array<{ toAsset: string; toChain: string; percentage: number }>
+  isPublic: boolean('is_public').notNull().default(true),
+  expiresAt: timestamp('expires_at'),
+  copyCount: integer('copy_count').notNull().default(0),
+  likeCount: integer('like_count').notNull().default(0),
+  viewCount: integer('view_count').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index("idx_shared_portfolios_user_id").on(table.userId),
+  index("idx_shared_portfolios_share_code").on(table.shareCode),
+  index("idx_shared_portfolios_is_public").on(table.isPublic),
+]);
+
+export const portfolioCopies = pgTable('portfolio_copies', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  portfolioId: integer('portfolio_id').notNull().references(() => sharedPortfolios.id, { onDelete: 'cascade' }),
+  originalTraderId: integer('original_trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  copiedAmount: text('copied_amount'),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_portfolio_copies_user_id").on(table.userId),
+  index("idx_portfolio_copies_portfolio_id").on(table.portfolioId),
+]);
+
+export const portfolioNotifications = pgTable('portfolio_notifications', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  traderId: integer('trader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  portfolioId: integer('portfolio_id').references(() => sharedPortfolios.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  isRead: boolean('is_read').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_portfolio_notifications_user_id").on(table.userId),
+]);
+
+export const portfolioHistory = pgTable('portfolio_history', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  portfolioId: integer('portfolio_id').notNull().references(() => sharedPortfolios.id, { onDelete: 'cascade' }),
+  changeType: text('change_type').notNull(),
+  previousPortfolio: jsonb('previous_portfolio'),
+  newPortfolio: jsonb('new_portfolio').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_portfolio_history_portfolio_id").on(table.portfolioId),
+]);
 
 export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
