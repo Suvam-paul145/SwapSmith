@@ -116,7 +116,6 @@ const LiveStatsCard = () => {
 /* -------------------------------------------------------------------------- */
 
 export default function TerminalPage() {
-  const router = useRouter();
   const { address, isConnected } = useAccount();
   const { handleError } = useErrorHandler();
 

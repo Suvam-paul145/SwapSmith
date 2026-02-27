@@ -7,7 +7,7 @@ import { signOut } from 'firebase/auth'
 import {
   BarChart2, Users, ArrowLeftRight, TrendingUp, AlertTriangle,
   Activity, Clock, RefreshCw, LogOut, ShieldCheck, CheckCircle2, XCircle,
-  Layers, Zap,
+  Layers, Zap, Menu, X,
 } from 'lucide-react'
 
 interface Analytics {
@@ -179,6 +179,8 @@ export default function AdminDashboardPage() {
     router.push('/admin/login')
   }
 
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
   const successRate = analytics
     ? analytics.totalSwaps > 0
       ? Math.round((analytics.successCount / analytics.totalSwaps) * 100)
@@ -220,22 +222,49 @@ export default function AdminDashboardPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#070710', color: '#e4e4e7', fontFamily: 'inherit' }}>
 
-      {/* ── Top nav ────────────────────────────────────────────────────── */}
-      <nav style={{ background: '#0b0b18', borderBottom: '1px solid #18182a', padding: '14px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+      {/* Responsive styles */}
+      <style>{`
+        .admin-nav-label { display: inline; }
+        .admin-nav-sep   { display: inline; }
+        .admin-nav-hamburger { display: none !important; }
+        @media (max-width: 768px) {
+          .admin-nav-label    { display: none !important; }
+          .admin-nav-sep      { display: none !important; }
+          .admin-nav-right    { display: none !important; }
+          .admin-nav-hamburger{ display: flex !important; }
+          .admin-nav          { padding: 10px 16px !important; }
+          .admin-content      { padding: 16px 10px !important; }
+          .admin-2col         { grid-template-columns: 1fr !important; }
+          .admin-kpi-grid     { grid-template-columns: 1fr 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .admin-kpi-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+        @keyframes spin { to { transform: rotate(360deg) } }
+      `}</style>
+
+      {/* ── Navbar ── */}
+      <nav className="admin-nav" style={{ background: '#0b0b18', borderBottom: '1px solid #18182a', padding: '14px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+        {/* Brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center" style={{ width: 36, height: 36 }}>
             <Zap className="w-5 h-5 text-white" fill="white" />
           </div>
-          <span className="font-black text-lg uppercase tracking-tighter text-zinc-900 dark:text-white" style={{ letterSpacing: '-0.04em', fontSize: 18 }}>SwapSmith</span>
+          <span className="admin-nav-label" style={{ fontSize: 18, fontWeight: 700 }}>SwapSmith Admin</span>
           <span style={{ background: '#1e3a5f', color: '#93c5fd', border: '1px solid #2563eb44', borderRadius: 20, fontSize: 11, padding: '2px 10px', marginLeft: 4, fontWeight: 600 }}>
             {adminInfo?.role?.replace('_', ' ').toUpperCase()}
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        {/* Desktop actions */}
+        <div className="admin-nav-right" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ color: '#52525b', fontSize: 13 }}>
             {adminInfo?.name} · Last refresh: {lastRefresh.toLocaleTimeString()}
           </span>
+          <button onClick={() => router.push('/admin/users')}
+            style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <Users size={14} /> Users
+          </button>
           <button onClick={fetchAnalytics}
             style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <RefreshCw size={14} /> Refresh
@@ -245,9 +274,69 @@ export default function AdminDashboardPage() {
             <LogOut size={14} /> Logout
           </button>
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          className="admin-nav-hamburger"
+          onClick={() => setMobileNavOpen(true)}
+          style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', alignItems: 'center', gap: 6, fontSize: 13 }}
+        >
+          <Menu size={20} />
+        </button>
       </nav>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
+      {/* ── Mobile drawer ── */}
+      {mobileNavOpen && (
+        <>
+          <div
+            onClick={() => setMobileNavOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: '#00000070', backdropFilter: 'blur(2px)', zIndex: 200 }}
+          />
+          <div style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0, width: '80%', maxWidth: 300,
+            background: '#0b0b18', borderLeft: '1px solid #1e1e2a', zIndex: 201,
+            display: 'flex', flexDirection: 'column', padding: 24, gap: 8,
+          }}>
+            {/* Drawer header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', borderRadius: 8, padding: 6 }}>
+                  <ShieldCheck size={18} color="white" />
+                </div>
+                <span style={{ fontSize: 16, fontWeight: 700 }}>SwapSmith Admin</span>
+              </div>
+              <button onClick={() => setMobileNavOpen(false)} style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 8, padding: 6, cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+            {/* Admin info */}
+            <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 10, padding: '10px 14px', marginBottom: 8 }}>
+              <p style={{ color: '#71717a', fontSize: 12, margin: 0 }}>{adminInfo?.name}</p>
+              <p style={{ color: '#52525b', fontSize: 11, margin: '2px 0 0' }}>Last refresh: {lastRefresh.toLocaleTimeString()}</p>
+            </div>
+            {/* Nav buttons */}
+            <button onClick={() => { setMobileNavOpen(false); router.push('/admin/dashboard'); }}
+              style={{ background: '#1e1e40', border: '1px solid #2563eb55', color: '#93c5fd', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontWeight: 600 }}>
+              <BarChart2 size={16} /> Analytics
+            </button>
+            <button onClick={() => { setMobileNavOpen(false); router.push('/admin/users'); }}
+              style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+              <Users size={16} /> Users
+            </button>
+            <button onClick={() => { setMobileNavOpen(false); fetchAnalytics(); }}
+              style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+              <RefreshCw size={16} /> Refresh
+            </button>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => { setMobileNavOpen(false); handleLogout(); }}
+              style={{ background: '#450a0a22', border: '1px solid #dc262644', color: '#f87171', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+              <LogOut size={16} /> Logout
+            </button>
+          </div>
+        </>
+      )}
+
+      <div className="admin-content" style={{ maxWidth: '100%', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* ── Section title ─────────────────────────────────────────────── */}
         <div style={{ marginBottom: 28 }}>
@@ -256,7 +345,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* ── Top KPI cards ─────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 16, marginBottom: 32 }}>
+        <div className="admin-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 16, marginBottom: 32 }}>
           <StatCard icon={ArrowLeftRight} label="Total Swaps"         value={a.totalSwaps}        color="#2563eb" />
           <StatCard icon={Zap}             label="Swaps Today"         value={a.totalSwapsToday}   color="#7c3aed" sub={`${a.totalSwapsWeek} this week`} />
           <StatCard icon={BarChart2}       label="Swaps (30 days)"     value={a.totalSwapsMonth}   color="#0891b2" />
@@ -303,7 +392,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* ── 2-col: top assets + top chains ───────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+        <div className="admin-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
           <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 12, padding: '20px 24px' }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>
               <Layers size={16} style={{ display: 'inline', marginRight: 6, color: '#7c3aed', verticalAlign: 'middle' }} />

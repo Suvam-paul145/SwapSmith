@@ -67,6 +67,18 @@ export default function AdminLoginPage() {
       })
       const data = await res.json()
 
+      if (res.status === 500) {
+        setError('Server authentication misconfiguration. Contact the system administrator.')
+        await auth.signOut()
+        return
+      }
+
+      if (res.status === 401) {
+        setError('Authentication failed. The server could not verify your session. Please try again.')
+        await auth.signOut()
+        return
+      }
+
       if (!data.isAdmin) {
         setError('Access denied. Your account does not have admin privileges.')
         await auth.signOut()
