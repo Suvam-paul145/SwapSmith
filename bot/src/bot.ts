@@ -1,4 +1,4 @@
-import { Telegraf, Markup, Context } from 'telegraf';
+import { Telegraf, Markup, Context, Update } from 'telegraf';
 import { message } from 'telegraf/filters';
 import rateLimit from 'telegraf-ratelimit';
 import dotenv from 'dotenv';
@@ -122,6 +122,17 @@ bot.command('yield', async (ctx) => {
   }
 });
 
+bot.command('market', async (ctx) => {
+  await ctx.reply('📊 Fetching market intelligence...');
+  try {
+    const marketData = await getMarketData();
+    const message = formatMarketMessage(marketData);
+    ctx.replyWithMarkdown(message);
+  } catch {
+    ctx.reply('❌ Failed to fetch market data.');
+  }
+});
+
 
 bot.command('clear', async (ctx) => {
   if (ctx.from) {
@@ -169,7 +180,7 @@ bot.on(message('voice'), async (ctx) => {
 /* -------------------------------------------------------------------------- */
 
 async function handleTextMessage(
-  ctx: Context,
+  ctx: Context<Update>,
   text: string,
   inputType: 'text' | 'voice' = 'text'
 ) {
@@ -388,17 +399,27 @@ bot.action('confirm_checkout', async (ctx) => {
 bot.action('confirm_portfolio', async (ctx) => {
   const userId = ctx.from.id;
   const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'portfolio') return ctx.answerCbQuery('Session expired.');
 
-  const { fromAsset, fromChain, amount, portfolio, settleAddress } = state.parsedCommand;
+  if (!state?.parsedCommand || state.parsedCommand.intent !== 'portfolio') {
+    return ctx.answerCbQuery('Session expired.');
+  }
+
+  const { fromAsset, fromChain, amount, portfolio, settleAddress } =
+    state.parsedCommand;
 
   if (!portfolio || portfolio.length === 0) {
     return ctx.editMessageText('❌ No portfolio allocation found.');
   }
 
-  const totalPercentage = portfolio.reduce((sum: number, p: NonNullable<ParsedCommand['portfolio']>[number]) => sum + p.percentage, 0);
+  const totalPercentage = portfolio.reduce(
+    (sum: number, p: any) => sum + p.percentage,
+    0
+  );
+
   if (Math.abs(totalPercentage - 100) > 1) {
-    return ctx.editMessageText(`❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`);
+    return ctx.editMessageText(
+      `❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`
+    );
   }
 
   if (!amount || amount <= 0) {
@@ -406,18 +427,32 @@ bot.action('confirm_portfolio', async (ctx) => {
   }
 
   try {
-    await ctx.answerCbQuery('Processing...');
-    const result = await executePortfolioStrategy(userId, state.parsedCommand);
+    await ctx.answerCbQuery('Executing portfolio strategy...');
 
-    const summary = result.successfulOrders
-      .map(o => `✅ ${o.allocation.toAsset}: ${o.swapAmount.toFixed(4)} ${fromAsset}`)
+    const result = await executePortfolioStrategy(userId, {
+      fromAsset: fromAsset!,
+      fromChain: fromChain!,
+      amount,
+      portfolio,
+      settleAddress: settleAddress!,
+    });
+
+    const summary = result
+      .map(
+        (r: any) =>
+          `• ${r.amount} ${r.fromAsset} → ${r.toAsset} (${r.chain})`
+      )
       .join('\n');
 
-    ctx.editMessageText(`✅ Portfolio strategy executed successfully!\n\n${summary}`);
+    ctx.editMessageText(
+      `✅ *Portfolio strategy executed successfully!*\n\n${summary}`,
+      { parse_mode: 'Markdown' }
+    );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Portfolio execution error:', { userId, error: errorMessage });
-    ctx.editMessageText(`❌ Portfolio execution failed: ${errorMessage}`);
+    const message =
+      error instanceof Error ? error.message : 'Unknown error';
+    logger.error('PortfolioExecutionFailed', { userId, error: message });
+    ctx.editMessageText(`❌ Portfolio execution failed: ${message}`);
   } finally {
     await db.clearConversationState(userId);
   }
@@ -426,11 +461,18 @@ bot.action('confirm_portfolio', async (ctx) => {
 bot.action('confirm_trailing_stop', async (ctx) => {
   const userId = ctx.from.id;
   const state = await db.getConversationState(userId);
+
   if (!state?.parsedCommand || state.parsedCommand.intent !== 'trailing_stop') {
     return ctx.answerCbQuery('Session expired.');
   }
 
-  const { fromAsset, toAsset, amount, trailingPercentage, settleAddress } = state.parsedCommand;
+  const {
+    fromAsset,
+    toAsset,
+    amount,
+    trailingPercentage,
+    settleAddress,
+  } = state.parsedCommand;
 
   if (!amount || amount <= 0) {
     return ctx.editMessageText('❌ Invalid amount.');
@@ -443,31 +485,34 @@ bot.action('confirm_trailing_stop', async (ctx) => {
   try {
     await ctx.answerCbQuery('Creating trailing stop order...');
 
-    const order = await trailingStopWorker.createTrailingStopOrder({
-      telegramId: userId,
-      fromAsset: fromAsset!,
-      fromNetwork: 'ethereum',
-      toAsset: toAsset!,
-      toNetwork: 'ethereum',
-      fromAmount: amount.toString(),
-      trailingPercentage: trailingPercentage,
-      settleAddress: settleAddress!,
-    });
+    const order =
+      await trailingStopWorker.createTrailingStopOrder({
+        telegramId: userId,
+        fromAsset: fromAsset!,
+        fromNetwork: 'ethereum',
+        toAsset: toAsset!,
+        toNetwork: 'ethereum',
+        fromAmount: amount.toString(),
+        trailingPercentage,
+        settleAddress: settleAddress!,
+      });
 
     ctx.editMessageText(
       `✅ *Trailing Stop Order Created!*\n\n` +
-      `Order ID: \`${order.id}\`\n` +
-      `Asset: ${order.fromAsset}\n` +
-      `Amount: ${order.fromAmount}\n` +
-      `Trailing: ${order.trailingPercentage}%\n` +
-      `Status: ${order.status}\n\n` +
-      `The order is now active and monitoring prices. You'll be notified when the trailing stop is triggered.`,
+        `Order ID: \`${order.id}\`\n` +
+        `Asset: ${order.fromAsset}\n` +
+        `Amount: ${order.fromAmount}\n` +
+        `Trailing: ${order.trailingPercentage}%\n` +
+        `Status: ${order.status}`,
       { parse_mode: 'Markdown' }
     );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Trailing stop creation error:', { userId, error: errorMessage });
-    ctx.editMessageText(`❌ Failed to create trailing stop order: ${errorMessage}`);
+    const message =
+      error instanceof Error ? error.message : 'Unknown error';
+    logger.error('TrailingStopFailed', { userId, error: message });
+    ctx.editMessageText(
+      `❌ Failed to create trailing stop order: ${message}`
+    );
   } finally {
     await db.clearConversationState(userId);
   }

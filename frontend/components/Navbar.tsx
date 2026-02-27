@@ -92,8 +92,8 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group shrink-0">
-            <div className="bg-blue-600 p-1.5 rounded-xl shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-all duration-200">
-              <Zap className="w-5 h-5 text-white" fill="white" />
+            <div className="rounded-xl shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-all duration-200 overflow-hidden" style={{ width: 32, height: 32 }}>
+              <Image src="/swapsmithicon.png" alt="SwapSmith" width={32} height={32} />
             </div>
             <span className="hidden lg:block text-lg font-black uppercase tracking-tighter text-zinc-900 dark:text-white">
               SwapSmith
@@ -205,8 +205,8 @@ export default function Navbar() {
             <div className="p-6 flex flex-col h-full">
               <div className="flex items-center justify-between mb-6">
                 <Link href="/" className="flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
-                  <div className="bg-blue-600 p-1.5 rounded-xl">
-                    <Zap className="w-5 h-5 text-white" fill="white" />
+                  <div className="rounded-xl overflow-hidden" style={{ width: 32, height: 32 }}>
+                    <Image src="/swapsmithicon.png" alt="SwapSmith" width={32} height={32} />
                   </div>
                   <span className="font-black text-lg uppercase tracking-tighter text-zinc-900 dark:text-white">SwapSmith</span>
                 </Link>
