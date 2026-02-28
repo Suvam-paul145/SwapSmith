@@ -3,6 +3,7 @@
  * Configuration for supported cross-chain bridge protocols
  * Supports: Across, Stargate, LayerZero, Wormhole
  */
+import { SIDESHIFT_CONFIG } from './sideshift';
 
 export interface BridgeConfig {
   name: string;
@@ -218,7 +219,7 @@ export const BRIDGE_CONFIGS: Record<string, BridgeConfig> = {
   sideshift: {
     name: 'sideshift',
     displayName: 'SideShift.ai',
-    apiBaseUrl: process.env.SIDESHIFT_API_URL || 'https://sideshift.ai/api/v2',
+    apiBaseUrl: process.env.SIDESHIFT_API_URL || SIDESHIFT_CONFIG.BASE_URL,
     timeout: 15000,
     retryAttempts: 3,
     supportedChains: ['ethereum', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'bsc', 'base', 'solana', 'bitcoin', 'litecoin'],

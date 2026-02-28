@@ -8,6 +8,7 @@
 
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { SIDESHIFT_CONFIG } from '../../../shared/config/sideshift';
 
 dotenv.config();
 
@@ -15,8 +16,8 @@ const AFFILIATE_ID = process.env.SIDESHIFT_AFFILIATE_ID || process.env.NEXT_PUBL
 const API_KEY = process.env.SIDESHIFT_API_KEY || process.env.NEXT_PUBLIC_SIDESHIFT_API_KEY;
 const DEFAULT_USER_IP = process.env.SIDESHIFT_CLIENT_IP;
 
-// SideShift API Configuration
-const SIDESHIFT_BASE_URL = 'https://sideshift.ai/api/v2';
+// SideShift API Configuration - use centralized config
+const SIDESHIFT_BASE_URL = process.env.SIDESHIFT_API_URL || SIDESHIFT_CONFIG.BASE_URL;
 
 // Bridge API URL for aggregated quotes (optional)
 const BRIDGE_API_URL = process.env.BRIDGE_API_URL || '';
