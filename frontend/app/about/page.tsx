@@ -41,7 +41,7 @@ function GlassCard({
 }: {
   children: React.ReactNode;
   title?: string;
-  icon?: any;
+  icon?: React.ElementType;
   className?: string;
 }) {
   return (

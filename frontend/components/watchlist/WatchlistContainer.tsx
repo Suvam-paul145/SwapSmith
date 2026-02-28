@@ -221,7 +221,7 @@ export default function WatchlistContainer({ onSwap }: WatchlistContainerProps) 
             className="text-center py-12"
           >
             <p className="text-[rgb(var(--text-muted))]">
-              No tokens found matching "{searchQuery}"
+              No tokens found matching &quot;{searchQuery}&quot;
             </p>
           </motion.div>
         ) : (

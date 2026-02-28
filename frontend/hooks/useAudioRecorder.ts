@@ -1,11 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-declare global {
-  interface Window {
-    webkitAudioContext: typeof AudioContext;
-  }
-}
-
 export interface AudioRecorderConfig {
   sampleRate?: number;
   numberOfAudioChannels?: number;
@@ -145,16 +139,16 @@ class AudioRecorderPolyfill {
   // Add these missing properties:
   private isSpeechToText: boolean = false;
   private speechResult: string = '';
-  private recognition: any = null;
+  private recognition: SpeechRecognition | null = null;
 
   constructor() {
     this.detectBrowser();
     
     // Initialize SpeechRecognition if it exists in the window
     if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        this.recognition = new SpeechRecognition();
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognitionAPI) {
+        this.recognition = new SpeechRecognitionAPI();
       }
     }
   }
@@ -244,7 +238,7 @@ class AudioRecorderPolyfill {
       this.speechResult = '';
 
       // If no MediaRecorder and no AudioContext, try SpeechRecognition (iOS fallback)
-      if (this.useFallback && !(window.AudioContext || (window as any).webkitAudioContext)) {
+      if (this.useFallback && !(window.AudioContext || window.webkitAudioContext)) {
         if (this.recognition) {
           this.isSpeechToText = true;
           this.recognition.start();
@@ -349,10 +343,7 @@ class AudioRecorderPolyfill {
 
     const hasSpeechRecognition =
       typeof window !== 'undefined' &&
-      !!(
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition
-      );
+      !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
     return (
       hasGetUserMedia &&
