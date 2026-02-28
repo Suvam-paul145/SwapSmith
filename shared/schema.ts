@@ -153,6 +153,30 @@ export const limitOrders = pgTable('limit_orders', {
   index("idx_limit_orders_telegram_id").on(table.telegramId),
 ]);
 
+export const trailingStopOrders = pgTable('trailing_stop_orders', {
+  id: serial('id').primaryKey(),
+  telegramId: bigint('telegram_id', { mode: 'number' }).notNull(),
+  fromAsset: text('from_asset').notNull(),
+  fromNetwork: text('from_network'),
+  toAsset: text('to_asset').notNull(),
+  toNetwork: text('to_network'),
+  fromAmount: text('from_amount').notNull(),
+  settleAddress: text('settle_address'),
+  trailingPercentage: real('trailing_percentage').notNull(),
+  peakPrice: text('peak_price'),
+  currentPrice: text('current_price'),
+  triggerPrice: text('trigger_price'),
+  status: text('status').notNull().default('pending'),
+  isActive: boolean('is_active').notNull().default(true),
+  triggeredAt: timestamp('triggered_at'),
+  lastCheckedAt: timestamp('last_checked_at'),
+  sideshiftOrderId: text('sideshift_order_id'),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index("idx_trailing_stop_orders_telegram_id").on(table.telegramId),
+]);
+
 
 // --- SHARED SCHEMAS (used by both bot and frontend) ---
 
@@ -185,6 +209,40 @@ export const userSettings = pgTable('user_settings', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index("idx_user_settings_user_id").on(table.userId),
+]);
+
+export const portfolioTargets = pgTable('portfolio_targets', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  name: text('name').notNull().default('My Portfolio'), // Added name column
+  assets: jsonb('assets').notNull(),
+  driftThreshold: real('drift_threshold').notNull().default(5),
+  autoRebalance: boolean('auto_rebalance').notNull().default(false),
+  isActive: boolean('is_active').notNull().default(true),
+  lastRebalancedAt: timestamp('last_rebalanced_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(), // Added updatedAt column
+}, (table) => [
+  index("idx_portfolio_targets_user_id").on(table.userId),
+]);
+
+export const rebalanceHistory = pgTable('rebalance_history', {
+  id: serial('id').primaryKey(),
+  portfolioTargetId: integer('portfolio_target_id').notNull(),
+  userId: text('user_id').notNull(),
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  triggerType: text('trigger_type').notNull(),
+  totalPortfolioValue: text('total_portfolio_value').notNull(),
+  swapsExecuted: jsonb('swaps_executed').notNull(),
+  totalFees: text('total_fees').notNull(),
+  status: text('status').notNull().default('pending'),
+  startedAt: timestamp('started_at').notNull().defaultNow(),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow(), // Added createdAt column
+}, (table) => [
+  index("idx_rebalance_history_user_id").on(table.userId),
+  index("idx_rebalance_history_target_id").on(table.portfolioTargetId),
 ]);
 
 

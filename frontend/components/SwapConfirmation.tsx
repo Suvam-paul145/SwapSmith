@@ -64,7 +64,7 @@ interface SafetyCheckResult {
 }
 
 // --- Main Component ---
-export default function SwapConfirmation({ quote, confidence = 100, onAmountChange }: SwapConfirmationProps) {
+export default function SwapConfirmation({ quote, confidence, onAmountChange }: SwapConfirmationProps) {
   const [copiedAddress, setCopiedAddress] = useState(false)
   const [copiedMemo, setCopiedMemo] = useState(false)
   const [isSimulating, setIsSimulating] = useState(false);
@@ -368,7 +368,7 @@ export default function SwapConfirmation({ quote, confidence = 100, onAmountChan
     <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h4 className="font-semibold text-gray-900">Swap Details</h4>
-        {confidence && confidence >= 90 ? (
+        {confidence && confidence >= 80 ? (
           <CheckCircle className="w-5 h-5 text-green-500" />
         ) : (
           <AlertCircle className="w-5 h-5 text-yellow-500" />
