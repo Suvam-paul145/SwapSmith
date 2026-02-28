@@ -80,7 +80,6 @@ export default function ChatInterface() {
   const [currentConfidence, setCurrentConfidence] = useState<number | undefined>(undefined);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const { address, isConnected } = useAccount();
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { handleError } = useErrorHandler();
@@ -253,14 +252,10 @@ export default function ChatInterface() {
     };
   }, [messages, isAuthenticated, isAuthLoading, user?.uid, address]);
 
-  // Show audio error if any and auto-focus text input
+  // Show audio error if any
   useEffect(() => {
     if (audioError) {
       addMessage({ role: 'assistant', content: audioError, type: 'message' });
-      // Auto-focus the text input on voice failure
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
     }
   }, [audioError]);
 
@@ -706,10 +701,6 @@ export default function ChatInterface() {
           content: "Sorry, I couldn't process your voice command. Please try again.",
           type: 'message'
         });
-        // Auto-focus the text input on transcription failure
-        setTimeout(() => {
-          inputRef.current?.focus();
-        }, 100);
       } finally {
         setIsLoading(false);
       }
@@ -855,7 +846,6 @@ export default function ChatInterface() {
             </button>
 
             <input
-              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
