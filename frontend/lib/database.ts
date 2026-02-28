@@ -1065,7 +1065,7 @@ export async function getPortfolioTargetById(id: number, userId: string): Promis
 export async function createPortfolioTarget(
   userId: string,
   name: string,
-  assets: any[],
+  assets: Record<string, unknown>[],
   driftThreshold: number = 5.0,
   autoRebalance: boolean = false
 ): Promise<PortfolioTarget | null> {
@@ -1091,7 +1091,7 @@ export async function updatePortfolioTarget(
   userId: string,
   updates: {
     name?: string;
-    assets?: any[];
+    assets?: Record<string, unknown>[];
     driftThreshold?: number;
     autoRebalance?: boolean;
     isActive?: boolean;

@@ -23,13 +23,13 @@ export interface BridgeQuoteRequest {
 export interface BridgeQuoteResponse {
   success: boolean;
   data?: {
-    quotes: any[];
-    bestQuote: any;
-    recommendedQuote: any;
-    optimizedRoutes?: any[];
-    comparison?: any;
+    quotes: Record<string, unknown>[];
+    bestQuote: Record<string, unknown> | null;
+    recommendedQuote: Record<string, unknown> | null;
+    optimizedRoutes?: Record<string, unknown>[];
+    comparison?: Record<string, unknown>;
     availableBridges: string[];
-    errors?: Record<string, any>; // Add this line to accept the errors object
+    errors?: Record<string, unknown>;
   };
   error?: string;
 }

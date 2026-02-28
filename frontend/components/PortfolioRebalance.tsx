@@ -38,7 +38,7 @@ interface RebalanceHistory {
   portfolioTargetId: number;
   triggerType: 'manual' | 'auto' | 'threshold';
   totalPortfolioValue: string;
-  swapsExecuted: any[];
+  swapsExecuted: Record<string, unknown>[];
   totalFees: string;
   status: 'pending' | 'completed' | 'failed' | 'partial';
   errorMessage: string | null;
@@ -371,7 +371,7 @@ function AddPortfolioModal({
     setAssets([...assets, { coin: '', network: 'ethereum', targetPercentage: 0 }]);
   };
 
-  const updateAsset = (index: number, field: keyof PortfolioAsset, value: any) => {
+  const updateAsset = (index: number, field: keyof PortfolioAsset, value: PortfolioAsset[keyof PortfolioAsset]) => {
     const newAssets = [...assets];
     newAssets[index] = { ...newAssets[index], [field]: value };
     setAssets(newAssets);
