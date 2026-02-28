@@ -9,7 +9,6 @@ import {
   Eye, EyeOff, Mail, Lock, AlertCircle, Loader2,
   Zap, ShieldCheck, Check, ArrowRight, BarChart2, Users, Shield,
 } from 'lucide-react'
-import Image from 'next/image'
 import AuroraBackground from '@/components/AuroraBackground'
 
 const ADMIN_FEATURES = [
@@ -68,18 +67,6 @@ export default function AdminLoginPage() {
       })
       const data = await res.json()
 
-      if (res.status === 500) {
-        setError('Server authentication misconfiguration. Contact the system administrator.')
-        await auth.signOut()
-        return
-      }
-
-      if (res.status === 401) {
-        setError('Authentication failed. The server could not verify your session. Please try again.')
-        await auth.signOut()
-        return
-      }
-
       if (!data.isAdmin) {
         setError('Access denied. Your account does not have admin privileges.')
         await auth.signOut()
@@ -116,8 +103,8 @@ export default function AdminLoginPage() {
         <div className="flex flex-col gap-5 px-8 xl:px-12 py-10 w-full">
           {/* Logo */}
           <div className="flex items-center gap-2.5 mb-1">
-            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center w-9 h-9 overflow-hidden">
-              <Image src="/swapsmithicon.png" alt="SwapSmith" width={36} height={36} />
+            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center w-9 h-9">
+              <Zap className="w-5 h-5 text-white" fill="white" />
             </div>
             <span className="font-black text-lg uppercase tracking-tighter text-zinc-900 dark:text-white" style={{ letterSpacing: '-0.04em' }}>SwapSmith</span>
           </div>

@@ -8,9 +8,10 @@ WORKDIR /app
 COPY shared ./shared
 
 RUN apk add --no-cache ffmpeg
+COPY . .
 
-# Change into frontend directory
-WORKDIR /app/frontend
+ARG GROQ_API_KEY
+ENV GROQ_API_KEY=$GROQ_API_KEY
 
 COPY frontend/package*.json ./
 RUN npm ci
@@ -24,7 +25,6 @@ FROM node:20-alpine AS runner
 WORKDIR /app/frontend
 
 ENV NODE_ENV=production
-RUN apk add --no-cache ffmpeg
 
 # copy standalone output (adjust paths to accommodate the new WORKDIR)
 COPY --from=builder /app/frontend/.next/standalone ./

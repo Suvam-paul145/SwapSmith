@@ -26,9 +26,7 @@
     "esbuild": "^0.27.3",
     "winston": "^3.19.0"
   },
-
   "devDependencies": {
     "@types/node": "^25.2.3"
   }
-
 }
