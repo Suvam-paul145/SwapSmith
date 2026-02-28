@@ -226,7 +226,21 @@ class AudioRecorderPolyfill {
 
   async startRecording(config: AudioRecorderConfig = {}): Promise<void> {
     try {
-      this.useFallback = typeof window.MediaRecorder === 'undefined';
+      this.mimeType = this.getBestMimeType();
+      this.useFallback = typeof window.MediaRecorder === 'undefined' || !this.mimeType;
+      this.isSpeechToText = false;
+      this.speechResult = '';
+
+      // If no MediaRecorder and no AudioContext, try SpeechRecognition (iOS fallback)
+      if (this.useFallback && !(window.AudioContext || (window as any).webkitAudioContext)) {
+        if (this.recognition) {
+          this.isSpeechToText = true;
+          this.recognition.start();
+          return;
+        }
+        throw new Error('No recording method supported');
+      }
+
       const constraints = this.getOptimalConstraints(config);
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
 
@@ -308,13 +322,29 @@ class AudioRecorderPolyfill {
   }
 
   isSupported(): boolean {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-      return false;
-    }
-    // Supported if MediaRecorder exists OR AudioContext exists
-    return !!(
-      (typeof window !== 'undefined' && window.MediaRecorder) || 
-      (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext))
+    if (typeof navigator === 'undefined') return false;
+
+    const hasGetUserMedia =
+      !!navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getUserMedia === 'function';
+
+    const hasMediaRecorder =
+      typeof window !== 'undefined' && !!window.MediaRecorder;
+
+    const hasAudioContext =
+      typeof window !== 'undefined' &&
+      !!(window.AudioContext || window.webkitAudioContext);
+
+    const hasSpeechRecognition =
+      typeof window !== 'undefined' &&
+      !!(
+        (window as any).SpeechRecognition ||
+        (window as any).webkitSpeechRecognition
+      );
+
+    return (
+      hasGetUserMedia &&
+      (hasMediaRecorder || hasAudioContext || hasSpeechRecognition)
     );
   }
 

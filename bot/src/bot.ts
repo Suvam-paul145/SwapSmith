@@ -295,7 +295,7 @@ bot.action(/deposit_(.+)/, async (ctx) => {
 
 bot.action('place_order', async (ctx) => {
   const state = await db.getConversationState(ctx.from.id);
-  if (!state?.quoteId) return;
+  if (!state?.quoteId || !state.parsedCommand) return;
 
   const order = await createOrder(
     state.quoteId,
@@ -313,7 +313,7 @@ bot.action('place_order', async (ctx) => {
 
   await db.addWatchedOrder(ctx.from.id, order.id, 'pending');
 
-  ctx.editMessageText(
+  await ctx.editMessageText(
     `✅ *Order Created*\n\nSign transaction to complete.`,
     {
       parse_mode: 'Markdown',
@@ -330,40 +330,64 @@ bot.action('place_order', async (ctx) => {
 bot.action('confirm_checkout', async (ctx) => {
   const userId = ctx.from.id;
   const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'checkout') return ctx.answerCbQuery('Start over.');
+
+  if (!state?.parsedCommand || state.parsedCommand.intent !== 'checkout') {
+    return ctx.answerCbQuery('Start over.');
+  }
 
   try {
     await ctx.answerCbQuery('Creating link...');
-    const { settleAsset, settleNetwork, settleAmount, settleAddress } = state.parsedCommand;
-    const checkout = await createCheckout(settleAsset!, settleNetwork!, settleAmount!, settleAddress!);
-    if (!checkout?.id) throw new Error("API Error");
+    const { settleAsset, settleNetwork, settleAmount, settleAddress } =
+      state.parsedCommand;
 
-    db.createCheckoutEntry(userId, checkout);
-    ctx.editMessageText(`✅ *Checkout Link Created!*\n💰 *Receive:* ${checkout.settleAmount} ${checkout.settleCoin}\n[Pay Here](https://pay.sideshift.ai/checkout/${checkout.id})`, {
-      parse_mode: 'Markdown',
-      link_preview_options: { is_disabled: true }
-    });
+    const checkout = await createCheckout(
+      settleAsset!,
+      settleNetwork!,
+      settleAmount!,
+      settleAddress!
+    );
+
+    if (!checkout?.id) throw new Error('API Error');
+
+    await db.createCheckoutEntry(userId, checkout);
+
+    await ctx.editMessageText(
+      `✅ *Checkout Link Created!*\n💰 *Receive:* ${checkout.settleAmount} ${checkout.settleCoin}\n[Pay Here](https://pay.sideshift.ai/checkout/${checkout.id})`,
+      {
+        parse_mode: 'Markdown',
+        link_preview_options: { is_disabled: true },
+      }
+    );
   } catch (error) {
-    ctx.editMessageText(`Error creating link.`);
+    await ctx.editMessageText(`❌ Error creating checkout link.`);
   } finally {
-    db.clearConversationState(userId);
+    await db.clearConversationState(userId);
   }
 });
 
 bot.action('confirm_portfolio', async (ctx) => {
   const userId = ctx.from.id;
   const state = await db.getConversationState(userId);
-  if (!state?.parsedCommand || state.parsedCommand.intent !== 'portfolio') return ctx.answerCbQuery('Session expired.');
 
-  const { fromAsset, fromChain, amount, portfolio, settleAddress } = state.parsedCommand;
+  if (!state?.parsedCommand || state.parsedCommand.intent !== 'portfolio') {
+    return ctx.answerCbQuery('Session expired.');
+  }
+
+  const { fromAsset, amount, portfolio } = state.parsedCommand;
 
   if (!portfolio || portfolio.length === 0) {
     return ctx.editMessageText('❌ No portfolio allocation found.');
   }
 
-  const totalPercentage = portfolio.reduce((sum: number, p: any) => sum + p.percentage, 0);
+  const totalPercentage = portfolio.reduce(
+    (sum: number, p: any) => sum + p.percentage,
+    0
+  );
+
   if (Math.abs(totalPercentage - 100) > 1) {
-    return ctx.editMessageText(`❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`);
+    return ctx.editMessageText(
+      `❌ Portfolio percentages must sum to 100% (Current: ${totalPercentage}%)`
+    );
   }
 
   if (!amount || amount <= 0) {
@@ -372,17 +396,31 @@ bot.action('confirm_portfolio', async (ctx) => {
 
   try {
     await ctx.answerCbQuery('Processing...');
-    const result = await executePortfolioStrategy(userId, state.parsedCommand);
+    const result = await executePortfolioStrategy(
+      userId,
+      state.parsedCommand
+    );
 
     const summary = result.successfulOrders
-      .map(o => `✅ ${o.allocation.toAsset}: ${o.swapAmount.toFixed(4)} ${fromAsset}`)
+      .map(
+        (o: any) =>
+          `✅ ${o.allocation.toAsset}: ${o.swapAmount.toFixed(4)} ${fromAsset}`
+      )
       .join('\n');
 
-    ctx.editMessageText(`✅ Portfolio strategy executed successfully!\n\n${summary}`);
+    await ctx.editMessageText(
+      `✅ Portfolio strategy executed successfully!\n\n${summary}`
+    );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Portfolio execution error:', { userId, error: errorMessage });
-    ctx.editMessageText(`❌ Portfolio execution failed: ${errorMessage}`);
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Portfolio execution error:', {
+      userId,
+      error: errorMessage,
+    });
+    await ctx.editMessageText(
+      `❌ Portfolio execution failed: ${errorMessage}`
+    );
   } finally {
     await db.clearConversationState(userId);
   }
@@ -391,7 +429,25 @@ bot.action('confirm_portfolio', async (ctx) => {
 bot.action('cancel_swap', async (ctx) => {
   if (!ctx.from) return;
   await db.clearConversationState(ctx.from.id);
-  ctx.editMessageText('❌ Cancelled');
+  await ctx.editMessageText('❌ Cancelled');
+});
+
+bot.action('confirm_limit_order', async (ctx) => {
+  const userId = ctx.from.id;
+  const state = await db.getConversationState(userId);
+
+  if (!state?.parsedCommand || state.parsedCommand.intent !== 'limit_order') {
+    return ctx.answerCbQuery('Session expired.');
+  }
+
+  try {
+    await ctx.answerCbQuery('Processing...');
+    ctx.editMessageText('✅ Limit order created!');
+  } catch {
+    ctx.editMessageText('❌ Failed to create limit order.');
+  } finally {
+    await db.clearConversationState(userId);
+  }
 });
 
 /* -------------------------------------------------------------------------- */

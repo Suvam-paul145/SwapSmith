@@ -7,8 +7,11 @@ WORKDIR /app
 # Copy the shared directory 
 COPY shared ./shared
 
-# Change into frontend directory
-WORKDIR /app/frontend
+RUN apk add --no-cache ffmpeg
+COPY . .
+
+ARG GROQ_API_KEY
+ENV GROQ_API_KEY=$GROQ_API_KEY
 
 COPY frontend/package*.json ./
 RUN npm ci

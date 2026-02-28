@@ -24,10 +24,7 @@ jest.mock('../logger', () => ({
     }
 }));
 
-
 import { parseUserCommand } from '../parseUserCommand';
-
-console.error("TEST_STARTING");
 
 describe('Issue #276: NLP Parser Multi-Asset Commands', () => {
     it('should detect multiple source assets "Swap my ETH and MATIC for USDC on Arbitrum"', async () => {

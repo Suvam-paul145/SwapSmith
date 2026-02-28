@@ -78,7 +78,6 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [pendingCommand, setPendingCommand] = useState<ParsedCommand | null>(null);
   const [currentConfidence, setCurrentConfidence] = useState<number | undefined>(undefined);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { address, isConnected } = useAccount();
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
