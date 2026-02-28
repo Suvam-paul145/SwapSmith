@@ -15,7 +15,7 @@ export interface UseAudioRecorderReturn {
   isRecording: boolean;
   isSupported: boolean;
   startRecording: () => Promise<void>;
-  stopRecording: () => Promise<Blob | string | null>;
+  stopRecording: () => Promise<Blob | null>;
   error: string | null;
   browserInfo: {
     browser: string;
@@ -95,7 +95,7 @@ class WebAudioRecorder {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     this.context = new AudioContextClass({ sampleRate: this.sampleRate });
     this.input = this.context.createMediaStreamSource(this.stream);
-
+    
     // bufferSize 4096 is a good balance between latency and performance
     this.processor = this.context.createScriptProcessor(4096, 1, 1);
 
@@ -111,17 +111,17 @@ class WebAudioRecorder {
 
   async stop(): Promise<Blob> {
     if (this.processor && this.input && this.context) {
-      this.input.disconnect();
-      this.processor.disconnect();
-      if (this.context.state !== 'closed') {
-        await this.context.close();
-      }
+       this.input.disconnect();
+       this.processor.disconnect();
+       if (this.context.state !== 'closed') {
+         await this.context.close();
+       }
     }
 
     // Determine total length
     const totalLength = this.chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const result = new Float32Array(totalLength);
-
+    
     // Flatten chunks
     let offset = 0;
     for (const chunk of this.chunks) {
@@ -137,24 +137,20 @@ class WebAudioRecorder {
 class AudioRecorderPolyfill {
   private mediaRecorder: MediaRecorder | null = null;
   private webAudioRecorder: WebAudioRecorder | null = null;
-  private recognition: any = null; // SpeechRecognition
   private audioChunks: Blob[] = [];
   private stream: MediaStream | null = null;
   private mimeType: string = '';
   private browser: string = 'unknown';
   private useFallback: boolean = false;
-  private isSpeechToText: boolean = false;
-  private speechResult: string = '';
 
   constructor() {
     this.detectBrowser();
-    this.initSpeechRecognition();
   }
 
   private detectBrowser(): void {
     if (typeof navigator === 'undefined') return;
     const userAgent = navigator.userAgent;
-
+    
     if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
       this.browser = 'chrome';
     } else if (userAgent.includes('Firefox')) {
@@ -166,46 +162,40 @@ class AudioRecorderPolyfill {
     }
   }
 
-  private initSpeechRecognition() {
-    if (typeof window === 'undefined') return;
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      this.recognition = new SpeechRecognition();
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
-      this.recognition.lang = 'en-US';
-
-      this.recognition.onresult = (event: any) => {
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            final += event.results[i][0].transcript;
-          }
-        }
-        this.speechResult = final;
-      };
-    }
-  }
-
   private getBestMimeType(): string {
-    const mimeTypesToTry = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/ogg;codecs=opus',
-      'audio/ogg',
-      'audio/mp4',
-      'audio/aac',
-      'audio/wav'
-    ];
+    const mimeTypesByBrowser = {
+      chrome: [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/wav'
+      ],
+      firefox: [
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/webm',
+        'audio/wav'
+      ],
+      safari: [
+        'audio/mp4',
+        'audio/wav',
+        'audio/webm'
+      ],
+      edge: [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/wav'
+      ]
+    };
 
-    if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
-      return '';
-    }
+    const browserMimeTypes = mimeTypesByBrowser[this.browser as keyof typeof mimeTypesByBrowser] || mimeTypesByBrowser.chrome;
 
-    for (const mimeType of mimeTypesToTry) {
-      if (MediaRecorder.isTypeSupported(mimeType)) {
-        return mimeType;
+    for (const mimeType of browserMimeTypes) {
+      try {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeType)) {
+          return mimeType;
+        }
+      } catch {
+        continue;
       }
     }
 
@@ -223,12 +213,11 @@ class AudioRecorderPolyfill {
       }
     };
 
-    // Safari on iOS often ignores sampleRate constraints if set too low
     if (this.browser === 'safari') {
       const audioConstraints = baseConstraints.audio as MediaTrackConstraints;
       baseConstraints.audio = {
         ...audioConstraints,
-        sampleRate: 48000 // Safari prefers 48k or 44.1k
+        sampleRate: 44100
       };
     }
 
@@ -256,21 +245,31 @@ class AudioRecorderPolyfill {
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       if (this.useFallback) {
-        // Use Web Audio API Fallback (WAV)
+        // Use Web Audio API Fallback
         this.webAudioRecorder = new WebAudioRecorder(this.stream, config);
         this.webAudioRecorder.start();
       } else {
         // Use Native MediaRecorder
-        const options: MediaRecorderOptions = { mimeType: this.mimeType };
+        this.mimeType = this.getBestMimeType();
+        const options: MediaRecorderOptions = {};
+        if (this.mimeType) {
+          options.mimeType = this.mimeType;
+        }
 
-        // Bitrate tweaks - avoid excessively high bitrates on mobile
-        options.audioBitsPerSecond = 128000;
+        // Bitrate tweaks
+        if (['safari', 'firefox', 'chrome', 'edge'].includes(this.browser)) {
+          options.audioBitsPerSecond = 128000;
+        }
 
         try {
           this.mediaRecorder = new MediaRecorder(this.stream, options);
         } catch (e) {
-          console.warn("MediaRecorder failed with specific options, trying defaults", e);
-          this.mediaRecorder = new MediaRecorder(this.stream);
+          // If native MediaRecorder fails creation despite check, fallback
+          console.warn("MediaRecorder failed to initialize, switching to fallback", e);
+          this.useFallback = true;
+          this.webAudioRecorder = new WebAudioRecorder(this.stream, config);
+          this.webAudioRecorder.start();
+          return;
         }
 
         this.audioChunks = [];
@@ -280,7 +279,8 @@ class AudioRecorderPolyfill {
           }
         };
 
-        this.mediaRecorder.start(100); // Small slices for robustness
+        const timeSlice = this.browser === 'safari' ? 100 : 1000;
+        this.mediaRecorder.start(timeSlice);
       }
     } catch (error) {
       this.cleanup();
@@ -288,17 +288,7 @@ class AudioRecorderPolyfill {
     }
   }
 
-  async stopRecording(): Promise<Blob | string | null> {
-    if (this.isSpeechToText) {
-      if (this.recognition) {
-        this.recognition.stop();
-        // Wait a bit for final results if needed
-        await new Promise(r => setTimeout(r, 500));
-        return this.speechResult;
-      }
-      return null;
-    }
-
+  async stopRecording(): Promise<Blob | null> {
     if (this.useFallback) {
       if (!this.webAudioRecorder) return null;
       const blob = await this.webAudioRecorder.stop();
@@ -306,13 +296,12 @@ class AudioRecorderPolyfill {
       return blob;
     } else {
       if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
-        this.cleanup();
         return null;
       }
 
       return new Promise((resolve) => {
         this.mediaRecorder!.onstop = () => {
-          const finalMimeType = this.mimeType || this.mediaRecorder?.mimeType || 'audio/webm';
+          const finalMimeType = this.mimeType || 'audio/webm';
           const audioBlob = new Blob(this.audioChunks, { type: finalMimeType });
           this.cleanup();
           resolve(audioBlob);
@@ -335,31 +324,51 @@ class AudioRecorderPolyfill {
   isSupported(): boolean {
     if (typeof navigator === 'undefined') return false;
 
-    const hasMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    const hasMediaRecorder = !!(typeof window !== 'undefined' && window.MediaRecorder);
-    const hasAudioContext = !!(typeof window !== 'undefined' && (window.AudioContext || (window as any).webkitAudioContext));
-    const hasSpeech = !!(typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));
+    const hasGetUserMedia =
+      !!navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getUserMedia === 'function';
 
-    return (hasMedia && (hasMediaRecorder || hasAudioContext)) || hasSpeech;
+    const hasMediaRecorder =
+      typeof window !== 'undefined' && !!window.MediaRecorder;
+
+    const hasAudioContext =
+      typeof window !== 'undefined' &&
+      !!(window.AudioContext || window.webkitAudioContext);
+
+    const hasSpeechRecognition =
+      typeof window !== 'undefined' &&
+      !!(
+        (window as any).SpeechRecognition ||
+        (window as any).webkitSpeechRecognition
+      );
+
+    return (
+      hasGetUserMedia &&
+      (hasMediaRecorder || hasAudioContext || hasSpeechRecognition)
+    );
   }
 
   getBrowserInfo() {
-    const supportedMimeTypes = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported ? [
+    const supportedMimeTypes = typeof MediaRecorder !== 'undefined' ? [
       'audio/webm;codecs=opus',
       'audio/webm',
       'audio/mp4',
-      'audio/aac',
       'audio/wav',
       'audio/ogg;codecs=opus',
       'audio/ogg'
-    ].filter(mimeType => MediaRecorder.isTypeSupported(mimeType)) : [];
+    ].filter(mimeType => {
+      try {
+        return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mimeType);
+      } catch {
+        return false;
+      }
+    }) : ['audio/wav']; // Fallback supports WAV
 
     return {
       browser: this.browser,
       supportedMimeTypes,
       recommendedMimeType: this.getBestMimeType(),
-      isFallback: this.useFallback,
-      isSpeechToText: this.isSpeechToText
+      isFallback: typeof window !== 'undefined' && !window.MediaRecorder
     };
   }
 }
@@ -407,7 +416,7 @@ export const useAudioRecorder = (config: AudioRecorderConfig = {}): UseAudioReco
       setBrowserInfo(polyfillRef.current.getBrowserInfo());
     } catch (err: unknown) {
       console.error('Failed to start recording:', err);
-
+      
       const error = err as Error;
       if (error.name === 'NotAllowedError') {
         setError('Microphone access denied. Please enable microphone permissions and try again.');
@@ -422,7 +431,7 @@ export const useAudioRecorder = (config: AudioRecorderConfig = {}): UseAudioReco
     }
   }, [isSupported, isRecording, config]);
 
-  const stopRecording = useCallback(async (): Promise<Blob | string | null> => {
+  const stopRecording = useCallback(async (): Promise<Blob | null> => {
     if (!isRecording || !polyfillRef.current) {
       return null;
     }

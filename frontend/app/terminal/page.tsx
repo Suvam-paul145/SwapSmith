@@ -36,17 +36,17 @@ interface Message {
   content: string;
   timestamp: Date;
   type?:
-    | "message"
-    | "intent_confirmation"
-    | "swap_confirmation"
-    | "yield_info"
-    | "checkout_link";
+  | "message"
+  | "intent_confirmation"
+  | "swap_confirmation"
+  | "yield_info"
+  | "checkout_link";
   data?:
-    | ParsedCommand
-    | { quoteData: QuoteData; confidence: number }
-    | { url: string }
-    | { parsedCommand: ParsedCommand }
-    | Record<string, unknown>;
+  | ParsedCommand
+  | { quoteData: QuoteData; confidence: number }
+  | { url: string }
+  | { parsedCommand: ParsedCommand }
+  | Record<string, unknown>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -116,6 +116,7 @@ const LiveStatsCard = () => {
 /* -------------------------------------------------------------------------- */
 
 export default function TerminalPage() {
+  const router = useRouter();
   const { address, isConnected } = useAccount();
   const { handleError } = useErrorHandler();
 
@@ -221,9 +222,7 @@ export default function TerminalPage() {
     try {
       const audioBlob = await stopRecording();
       if (audioBlob) {
-        // Safely determine the type depending on whether it's a Blob or a string
-        const mimeType = audioBlob instanceof Blob ? (audioBlob.type || 'audio/wav') : 'audio/wav';
-        const audioFile = new File([audioBlob], "voice_command.wav", { type: mimeType });
+        const audioFile = new File([audioBlob], "voice_command.wav", { type: audioBlob.type || 'audio/wav' });
 
         const formData = new FormData();
         formData.append("file", audioFile);
@@ -600,21 +599,19 @@ export default function TerminalPage() {
               {messages.map((msg, i) => (
                 <div
                   key={i}
-                  className={`flex ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
                 >
                   <div className="max-w-[80%]">
                     <div
-                      className={`px-4 py-3 rounded-2xl text-sm ${
-                        msg.role === "user"
-                          ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg"
-                          : "panel"
-                      }`}
+                      className={`px-4 py-3 rounded-2xl text-sm ${msg.role === "user"
+                        ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg"
+                        : "panel"
+                        }`}
                     >
                       {msg.type === "swap_confirmation" &&
-                      msg.data &&
-                      "quoteData" in msg.data ? (
+                        msg.data &&
+                        "quoteData" in msg.data ? (
                         <SwapConfirmation
                           quote={(msg.data as { quoteData: QuoteData }).quoteData}
                           confidence={(msg.data as { confidence: number }).confidence}

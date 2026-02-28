@@ -179,7 +179,6 @@ export async function createZapTransaction(
       settleAmount: zapQuote.expectedReceive,
       rate: (parseFloat(zapQuote.expectedReceive) / parseFloat(zapQuote.fromAmount)).toString(),
       affiliateId: '',
-      depositAddress: undefined
     },
     stakePool: zapQuote.stakePool,
     stakeTransactionData: {

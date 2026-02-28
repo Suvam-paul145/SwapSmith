@@ -24,7 +24,6 @@ jest.mock('../logger', () => ({
     }
 }));
 
-
 import { parseUserCommand } from '../parseUserCommand';
 
 describe('Issue #276: NLP Parser Multi-Asset Commands', () => {
@@ -57,6 +56,27 @@ describe('Issue #276: NLP Parser Multi-Asset Commands', () => {
 
     it('should detect "Convert BTC & ETH to USDC"', async () => {
         const input = "Convert BTC & ETH to USDC";
+        const result = await parseUserCommand(input);
+        expect(result.success).toBe(false);
+        expect(result.validationErrors).toContain('Multiple source assets not supported');
+    });
+
+    it('should detect "Swap 10 ETH and 20 MATIC to USDC"', async () => {
+        const input = "Swap 10 ETH and 20 MATIC to USDC";
+        const result = await parseUserCommand(input);
+        expect(result.success).toBe(false);
+        expect(result.validationErrors).toContain('Multiple source assets not supported');
+    });
+
+    it('should detect "Convert 0.5 BTC and 10 ETH into USDT"', async () => {
+        const input = "Convert 0.5 BTC and 10 ETH into USDT";
+        const result = await parseUserCommand(input);
+        expect(result.success).toBe(false);
+        expect(result.validationErrors).toContain('Multiple source assets not supported');
+    });
+
+    it('should detect "Swap 100 USDT & 500 USDC for ETH"', async () => {
+        const input = "Swap 100 USDT & 500 USDC for ETH";
         const result = await parseUserCommand(input);
         expect(result.success).toBe(false);
         expect(result.validationErrors).toContain('Multiple source assets not supported');
