@@ -189,7 +189,6 @@ export class TrailingStopWorker {
         await this.bot.telegram.sendMessage(
           Number(order.telegramId),
           `✅ *Trailing Stop Executed!*\n\n` +
-            `Order: \`${sideshiftOrder.id}\`\n` +
             `Deposit: ${quote.depositAmount} ${quote.depositCoin}\n` +
             `To: \`${sideshiftOrder.depositAddress}\``,
           { parse_mode: 'Markdown' }
