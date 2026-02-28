@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, desc, and, inArray, sql as drizzleSql } from 'drizzle-orm';
+import { eq, desc, and, inArray, sql as drizzleSql, count } from 'drizzle-orm';
 
 // Import all table schemas from shared schema file
 import {
@@ -251,10 +251,47 @@ export async function updateSwapHistoryStatus(sideshiftOrderId: string, status: 
   await db.update(swapHistory)
     .set({
       status,
-      ...(txHash ? { txHash } : {}),
-      updatedAt: new Date()
+      txHash: txHash || undefined,
+      updatedAt: new Date(),
     })
     .where(eq(swapHistory.sideshiftOrderId, sideshiftOrderId));
+}
+
+export async function getAgentReputation(): Promise<{ totalSwaps: number; successRate: number; successCount: number }> {
+  if (!db) {
+    console.warn('Database not configured');
+    return { totalSwaps: 0, successRate: 0, successCount: 0 };
+  }
+
+  try {
+    const result = await db
+      .select({
+        total: count(),
+        success: count(drizzleSql`CASE WHEN ${swapHistory.status} = 'settled' THEN 1 END`)
+      })
+      .from(swapHistory);
+    
+    if (!result || result.length === 0) {
+       return { totalSwaps: 0, successRate: 0, successCount: 0 };
+    }
+
+    const row = result[0];
+    const totalSwaps = Number(row.total);
+    const successCount = Number(row.success);
+    
+    const successRate = totalSwaps > 0 
+      ? (successCount / totalSwaps) * 100 
+      : 0;
+      
+    return {
+      totalSwaps,
+      successRate: Math.round(successRate * 10) / 10,
+      successCount
+    };
+  } catch (error) {
+    console.error('Error fetching agent reputation:', error);
+    return { totalSwaps: 0, successRate: 0, successCount: 0 };
+  }
 }
 
 // --- CHAT HISTORY FUNCTIONS ---
