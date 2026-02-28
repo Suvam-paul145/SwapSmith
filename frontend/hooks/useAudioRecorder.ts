@@ -133,7 +133,6 @@ class WebAudioRecorder {
   }
 }
 
-// Cross-browser audio recording wrapper
 class AudioRecorderPolyfill {
   private mediaRecorder: MediaRecorder | null = null;
   private webAudioRecorder: WebAudioRecorder | null = null;
@@ -143,8 +142,21 @@ class AudioRecorderPolyfill {
   private browser: string = 'unknown';
   private useFallback: boolean = false;
 
+  // Add these missing properties:
+  private isSpeechToText: boolean = false;
+  private speechResult: string = '';
+  private recognition: any = null;
+
   constructor() {
     this.detectBrowser();
+    
+    // Initialize SpeechRecognition if it exists in the window
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        this.recognition = new SpeechRecognition();
+      }
+    }
   }
 
   private detectBrowser(): void {

@@ -123,6 +123,24 @@ RESPONSE FORMAT:
 }
 `;
 
+export async function transcribeAudio(file: File): Promise<string> {
+  try {
+    const groq = getGroqClient();
+    
+    // Call Groq's audio transcription endpoint
+    const transcription = await groq.audio.transcriptions.create({
+      file: file,
+      model: "whisper-large-v3", // You can also use "whisper-large-v3-turbo" for faster/cheaper inference
+      response_format: "json",
+    });
+
+    return transcription.text;
+  } catch (error) {
+    console.error("Error transcribing audio with Groq:", error);
+    throw new Error("Failed to transcribe audio");
+  }
+}
+
 export async function parseUserCommand(userInput: string): Promise<ParsedCommand> {
   try {
     const groq = getGroqClient();
