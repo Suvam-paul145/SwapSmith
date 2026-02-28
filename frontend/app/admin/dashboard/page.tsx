@@ -264,6 +264,10 @@ export default function AdminDashboardPage() {
             style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <Users size={14} /> Users
           </button>
+          <button onClick={() => router.push('/admin/swaps')}
+            style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <ArrowLeftRight size={14} /> Swaps
+          </button>
           <button onClick={fetchAnalytics}
             style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <RefreshCw size={14} /> Refresh
@@ -319,6 +323,10 @@ export default function AdminDashboardPage() {
             <button onClick={() => { setMobileNavOpen(false); router.push('/admin/users'); }}
               style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
               <Users size={16} /> Users
+            </button>
+            <button onClick={() => { setMobileNavOpen(false); router.push('/admin/swaps'); }}
+              style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+              <ArrowLeftRight size={16} /> Swaps
             </button>
             <button onClick={() => { setMobileNavOpen(false); fetchAnalytics(); }}
               style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>

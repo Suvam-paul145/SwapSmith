@@ -16,6 +16,13 @@ interface GasToken {
   balance?: string;
 }
 
+interface GasPreferences {
+  autoOptimize: boolean;
+  preferredGasToken?: string;
+  maxGasPrice?: string;
+  priorityLevel?: string;
+}
+
 interface GasTokenSelectorProps {
   chain: string;
   userId?: string;
@@ -38,7 +45,7 @@ export default function GasTokenSelector({
   className = '',
 }: GasTokenSelectorProps) {
   const [tokens, setTokens] = useState<GasToken[]>([]);
-  const [preferences, setPreferences] = useState<any>(null);
+  const [preferences, setPreferences] = useState<GasPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);

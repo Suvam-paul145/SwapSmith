@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, desc, sql as drizzleSql, and } from 'drizzle-orm';
+import { eq, desc, sql as drizzleSql, and, or, ilike } from 'drizzle-orm';
 import {
   adminUsers,
   adminRequests,
@@ -359,6 +359,280 @@ export async function getUserSwapsForAdmin(userId: string, limit = 50) {
     .where(eq(swapHistory.userId, userId))
     .orderBy(desc(swapHistory.createdAt))
     .limit(limit);
+}
+
+// ── Admin Swap Monitoring ──────────────────────────────────────────────────
+
+export interface AdminSwapRow {
+  id: number;
+  userId: string;
+  walletAddress: string | null;
+  sideshiftOrderId: string;
+  quoteId: string | null;
+  fromAsset: string;
+  fromNetwork: string;
+  fromAmount: number;
+  toAsset: string;
+  toNetwork: string;
+  settleAmount: string;
+  depositAddress: string | null;
+  status: string;
+  txHash: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export async function getAdminSwaps(
+  page: number,
+  limit: number,
+  status?: string,
+  search?: string,
+): Promise<{ rows: AdminSwapRow[]; total: number }> {
+  const offset = (page - 1) * limit;
+
+  // Build where conditions
+  const conditions = [];
+  if (status && status !== 'all') {
+    conditions.push(eq(swapHistory.status, status));
+  }
+  if (search) {
+    const pat = `%${search}%`;
+    conditions.push(or(
+      ilike(swapHistory.sideshiftOrderId, pat),
+      ilike(swapHistory.userId, pat),
+      ilike(swapHistory.fromAsset, pat),
+      ilike(swapHistory.toAsset, pat),
+    )!);
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [countRows, rowsResult] = await Promise.all([
+    db.select({ total: drizzleSql<number>`count(*)::int` })
+      .from(swapHistory)
+      .where(where),
+    db.select({
+      id:               swapHistory.id,
+      userId:           swapHistory.userId,
+      walletAddress:    swapHistory.walletAddress,
+      sideshiftOrderId: swapHistory.sideshiftOrderId,
+      quoteId:          swapHistory.quoteId,
+      fromAsset:        swapHistory.fromAsset,
+      fromNetwork:      swapHistory.fromNetwork,
+      fromAmount:       swapHistory.fromAmount,
+      toAsset:          swapHistory.toAsset,
+      toNetwork:        swapHistory.toNetwork,
+      settleAmount:     swapHistory.settleAmount,
+      depositAddress:   swapHistory.depositAddress,
+      status:           swapHistory.status,
+      txHash:           swapHistory.txHash,
+      createdAt:        swapHistory.createdAt,
+      updatedAt:        swapHistory.updatedAt,
+    })
+      .from(swapHistory)
+      .where(where)
+      .orderBy(desc(swapHistory.createdAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
+
+  const rows: AdminSwapRow[] = rowsResult.map(r => ({
+    id:               r.id,
+    userId:           r.userId,
+    walletAddress:    r.walletAddress,
+    sideshiftOrderId: r.sideshiftOrderId,
+    quoteId:          r.quoteId,
+    fromAsset:        r.fromAsset,
+    fromNetwork:      r.fromNetwork,
+    fromAmount:       r.fromAmount,
+    toAsset:          r.toAsset,
+    toNetwork:        r.toNetwork,
+    settleAmount:     r.settleAmount,
+    depositAddress:   r.depositAddress,
+    status:           r.status,
+    txHash:           r.txHash,
+    createdAt:        r.createdAt ? r.createdAt.toISOString() : null,
+    updatedAt:        r.updatedAt ? r.updatedAt.toISOString() : null,
+  }));
+
+  return { rows, total: countRows[0]?.total ?? 0 };
+}
+
+export async function getAdminSwapById(sideshiftOrderId: string): Promise<AdminSwapRow | null> {
+  const rows = await db.select({
+    id:               swapHistory.id,
+    userId:           swapHistory.userId,
+    walletAddress:    swapHistory.walletAddress,
+    sideshiftOrderId: swapHistory.sideshiftOrderId,
+    quoteId:          swapHistory.quoteId,
+    fromAsset:        swapHistory.fromAsset,
+    fromNetwork:      swapHistory.fromNetwork,
+    fromAmount:       swapHistory.fromAmount,
+    toAsset:          swapHistory.toAsset,
+    toNetwork:        swapHistory.toNetwork,
+    settleAmount:     swapHistory.settleAmount,
+    depositAddress:   swapHistory.depositAddress,
+    status:           swapHistory.status,
+    txHash:           swapHistory.txHash,
+    createdAt:        swapHistory.createdAt,
+    updatedAt:        swapHistory.updatedAt,
+  })
+    .from(swapHistory)
+    .where(eq(swapHistory.sideshiftOrderId, sideshiftOrderId))
+    .limit(1);
+
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id:               r.id,
+    userId:           r.userId,
+    walletAddress:    r.walletAddress,
+    sideshiftOrderId: r.sideshiftOrderId,
+    quoteId:          r.quoteId,
+    fromAsset:        r.fromAsset,
+    fromNetwork:      r.fromNetwork,
+    fromAmount:       r.fromAmount,
+    toAsset:          r.toAsset,
+    toNetwork:        r.toNetwork,
+    settleAmount:     r.settleAmount,
+    depositAddress:   r.depositAddress,
+    status:           r.status,
+    txHash:           r.txHash,
+    createdAt:        r.createdAt ? r.createdAt.toISOString() : null,
+    updatedAt:        r.updatedAt ? r.updatedAt.toISOString() : null,
+  };
+}
+
+export interface SwapMetrics {
+  totalAllTime: number;
+  last24h: number;
+  last1h: number;
+  last5min: number;
+  statusBreakdown: { status: string; count: number }[];
+  perHour: { hour: string; count: number }[];
+  errorRate: number;
+  spikeDetected: boolean;
+  averagePer5Min: number;
+}
+
+export async function getSwapMetrics(): Promise<SwapMetrics> {
+  const now = new Date();
+  const h24 = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const h1  = new Date(now.getTime() - 1 * 60 * 60 * 1000).toISOString();
+  const m5  = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
+
+  const [totals, statusRows, hourRows] = await Promise.all([
+    rawSql`
+      SELECT
+        count(*)::int AS total,
+        count(*) filter (where created_at >= ${h24}::timestamptz)::int AS last_24h,
+        count(*) filter (where created_at >= ${h1}::timestamptz)::int AS last_1h,
+        count(*) filter (where created_at >= ${m5}::timestamptz)::int AS last_5min,
+        count(*) filter (where status = 'failed' AND created_at >= ${h24}::timestamptz)::int AS failed_24h
+      FROM swap_history
+    `,
+    rawSql`
+      SELECT status, count(*)::int AS cnt
+      FROM swap_history
+      GROUP BY status
+      ORDER BY cnt DESC
+    `,
+    rawSql`
+      SELECT date_trunc('hour', created_at)::text AS hour, count(*)::int AS cnt
+      FROM swap_history
+      WHERE created_at >= ${h24}::timestamptz
+      GROUP BY date_trunc('hour', created_at)
+      ORDER BY hour ASC
+    `,
+  ]);
+
+  type TotalsRow = { total: number; last_24h: number; last_1h: number; last_5min: number; failed_24h: number };
+  type StatusRow = { status: string; cnt: number };
+  type HourRow   = { hour: string; cnt: number };
+
+  const t = (totals as TotalsRow[])[0] ?? { total: 0, last_24h: 0, last_1h: 0, last_5min: 0, failed_24h: 0 };
+  const statusBreakdown = (statusRows as StatusRow[]).map(r => ({ status: r.status, count: r.cnt }));
+  const perHour = (hourRows as HourRow[]).map(r => ({ hour: r.hour, count: r.cnt }));
+
+  const avgPer5Min = t.last_1h > 0 ? t.last_1h / 12 : 0;
+  const spikeDetected = t.last_5min > Math.max(avgPer5Min * 3, 10);
+  const errorRate = t.last_24h > 0 ? Math.round((t.failed_24h / t.last_24h) * 100) : 0;
+
+  return {
+    totalAllTime: t.total,
+    last24h: t.last_24h,
+    last1h: t.last_1h,
+    last5min: t.last_5min,
+    statusBreakdown,
+    perHour,
+    errorRate,
+    spikeDetected,
+    averagePer5Min: Math.round(avgPer5Min * 10) / 10,
+  };
+}
+
+// ── Platform Config (emergency stop + API key) ─────────────────────────────
+// Stored in user_settings with userId = '__platform__'
+
+export interface PlatformSwapConfig {
+  swapExecutionEnabled: boolean;
+  sideshiftApiKey: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export async function getPlatformSwapConfig(): Promise<PlatformSwapConfig> {
+  const rows = await db.select({ preferences: userSettings.preferences })
+    .from(userSettings)
+    .where(eq(userSettings.userId, '__platform__'))
+    .limit(1);
+
+  if (!rows[0]?.preferences) {
+    return { swapExecutionEnabled: true, sideshiftApiKey: '', updatedAt: null, updatedBy: null };
+  }
+  try {
+    const p = JSON.parse(rows[0].preferences);
+    return {
+      swapExecutionEnabled: p.swapExecutionEnabled ?? true,
+      sideshiftApiKey: p.sideshiftApiKey ?? '',
+      updatedAt: p.updatedAt ?? null,
+      updatedBy: p.updatedBy ?? null,
+    };
+  } catch {
+    return { swapExecutionEnabled: true, sideshiftApiKey: '', updatedAt: null, updatedBy: null };
+  }
+}
+
+export async function updatePlatformSwapConfig(
+  patch: Partial<PlatformSwapConfig>,
+  adminEmail: string,
+): Promise<PlatformSwapConfig> {
+  const existing = await getPlatformSwapConfig();
+  const updated: PlatformSwapConfig = {
+    ...existing,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+    updatedBy: adminEmail,
+  };
+
+  const prefsStr = JSON.stringify(updated);
+  const exists = await db.select({ id: userSettings.id })
+    .from(userSettings)
+    .where(eq(userSettings.userId, '__platform__'))
+    .limit(1);
+
+  if (exists.length > 0) {
+    await db.update(userSettings)
+      .set({ preferences: prefsStr, updatedAt: new Date() })
+      .where(eq(userSettings.userId, '__platform__'));
+  } else {
+    await db.insert(userSettings).values({
+      userId: '__platform__',
+      preferences: prefsStr,
+      updatedAt: new Date(),
+    });
+  }
+  return updated;
 }
 
 /** Suspend / unsuspend / flag / unflag a user.

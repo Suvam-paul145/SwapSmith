@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { transcribeAudio } from '@/utils/server/audio-processor';
+import { transcribeAudio } from '@/utils/groq-client';
 
+export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -15,8 +16,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid file type. Please upload audio.' }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const text = await transcribeAudio(buffer, file.name);
+    const text = await transcribeAudio(file);
     return NextResponse.json({ text });
   } catch (error: unknown) {
     console.error('Transcription API Error:', error);

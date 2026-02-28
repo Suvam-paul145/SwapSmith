@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserSettings, createOrUpdateUserSettings } from '@/lib/database';
+import { adminAuth } from '@/lib/firebase-admin';
 
 // GET /api/user/settings - Get user settings
 export async function GET(request: NextRequest) {
   try {
+    // 🔐 Firebase authentication
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized: No token provided' }, { status: 401 });
+    }
+
+    const idToken = authHeader.split('Bearer ')[1];
+    let decodedToken;
+    try {
+      decodedToken = await adminAuth.verifyIdToken(idToken);
+    } catch (error) {
+      console.error('Error verifying Firebase token:', error);
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+    }
+
+    const authenticatedUserId = decodedToken.uid;
+
     // Validate DATABASE_URL exists
     if (!process.env.DATABASE_URL) {
       console.error('DATABASE_URL is not configured');
@@ -21,6 +39,11 @@ export async function GET(request: NextRequest) {
         { error: 'userId is required' },
         { status: 400 }
       );
+    }
+
+    // 🔐 IDOR protection: Ensure user can only access their own settings
+    if (userId !== authenticatedUserId) {
+      return NextResponse.json({ error: 'Forbidden: User ID mismatch' }, { status: 403 });
     }
 
     const settings = await getUserSettings(userId);
@@ -63,6 +86,23 @@ export async function GET(request: NextRequest) {
 // POST /api/user/settings - Create or update user settings
 export async function POST(request: NextRequest) {
   try {
+    // 🔐 Firebase authentication
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized: No token provided' }, { status: 401 });
+    }
+
+    const idToken = authHeader.split('Bearer ')[1];
+    let decodedToken;
+    try {
+      decodedToken = await adminAuth.verifyIdToken(idToken);
+    } catch (error) {
+      console.error('Error verifying Firebase token:', error);
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+    }
+
+    const authenticatedUserId = decodedToken.uid;
+
     // Validate DATABASE_URL exists
     if (!process.env.DATABASE_URL) {
       console.error('DATABASE_URL is not configured');
@@ -85,6 +125,11 @@ export async function POST(request: NextRequest) {
         { error: 'userId is required' },
         { status: 400 }
       );
+    }
+
+    // 🔐 IDOR protection: Ensure user can only modify their own settings
+    if (userId !== authenticatedUserId) {
+      return NextResponse.json({ error: 'Forbidden: User ID mismatch' }, { status: 403 });
     }
 
     await createOrUpdateUserSettings(

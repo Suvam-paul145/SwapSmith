@@ -18,11 +18,18 @@ interface GasEstimate {
   expiresAt?: Date;
 }
 
-
 interface GasPrediction {
   predictedPrice: string;
   confidence: number;
   trend: 'rising' | 'falling' | 'stable';
+}
+
+interface GasOptimization {
+  canOptimize: boolean;
+  method: 'token' | 'timing' | 'batching';
+  savings: { percent: number };
+  gasToken?: string;
+  estimatedExecutionTime?: Date | string;
 }
 
 interface GasFeeDisplayProps {
@@ -46,7 +53,7 @@ export default function GasFeeDisplay({
 }: GasFeeDisplayProps) {
   const [gasEstimate, setGasEstimate] = useState<GasEstimate | null>(null);
   const [prediction, setPrediction] = useState<GasPrediction | null>(null);
-  const [optimization, setOptimization] = useState<any>(null);
+  const [optimization, setOptimization] = useState<GasOptimization | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -238,7 +245,7 @@ export default function GasFeeDisplay({
           </p>
           {optimization.estimatedExecutionTime && (
             <p className="text-xs text-gray-500 mt-1">
-              Est. execution: {optimization.estimatedExecutionTime.toLocaleTimeString()}
+              Est. execution: {new Date(optimization.estimatedExecutionTime).toLocaleTimeString()}
             </p>
           )}
         </div>

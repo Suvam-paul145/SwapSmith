@@ -25,8 +25,7 @@ const groq = getGroqClient();
 
 export interface ParsedCommand {
   success: boolean;
-  intent: "swap" | "checkout" | "portfolio" | "yield_scout" | "yield_deposit" | "yield_migrate" | "dca" | "limit_order" | "swap_and_stake" | "trailing_stop" | "unknown";
-
+  intent: "swap" | "checkout" | "portfolio" | "yield_scout" | "yield_deposit" | "yield_migrate" | "dca" | "limit_order" | "swap_and_stake" | "unknown";
   
   // Single Swap Fields
   fromAsset: string | null;
@@ -80,11 +79,7 @@ export interface ParsedCommand {
   targetPrice?: number;
   condition?: 'above' | 'below';
 
-  // Trailing Stop Fields
-  trailingPercentage?: number;
-
   confidence: number;
-
   validationErrors: string[];
   parsedMessage: string;
   requiresConfirmation?: boolean; 

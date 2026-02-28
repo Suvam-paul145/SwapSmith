@@ -510,6 +510,13 @@ export default function AdminUsersPage() {
           }}>
             <Users size={14} /> Users
           </button>
+          <button onClick={() => router.push('/admin/swaps')} style={{
+            background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa',
+            borderRadius: 8, padding: '6px 14px', cursor: 'pointer', display: 'flex',
+            alignItems: 'center', gap: 6, fontSize: 13,
+          }}>
+            <ArrowLeftRight size={14} /> Swaps
+          </button>
           <span className="admin-nav-sep" style={{ color: '#27272a' }}>|</span>
           <span className="admin-nav-label" style={{ color: '#52525b', fontSize: 13 }}>{adminInfo?.name}</span>
           <button onClick={() => fetchUsers(page, search, token)} style={{
@@ -573,6 +580,10 @@ export default function AdminUsersPage() {
             <button
               style={{ background: '#1e1e40', border: '1px solid #2563eb55', color: '#93c5fd', borderRadius: 10, padding: '12px 16px', cursor: 'default', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontWeight: 600 }}>
               <Users size={16} /> Users
+            </button>
+            <button onClick={() => { setMobileNavOpen(false); router.push('/admin/swaps'); }}
+              style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+              <ArrowLeftRight size={16} /> Swaps
             </button>
             <button onClick={() => { setMobileNavOpen(false); fetchUsers(page, search, token); }}
               style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', borderRadius: 10, padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
