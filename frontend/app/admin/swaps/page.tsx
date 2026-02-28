@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 import { auth } from '@/lib/firebase'
 import { signOut } from 'firebase/auth'
 import {
-  ArrowLeftRight, BarChart2, Users, LogOut, RefreshCw,
-  Search, ChevronLeft, ChevronRight, Eye, X, Menu,
+  ArrowLeftRight,
+  Search, ChevronLeft, ChevronRight, Eye, X,
   AlertTriangle, Activity, ShieldAlert, ShieldCheck,
   Key, Clock, CheckCircle2, XCircle, Loader2, Zap,
-  TrendingUp, ToggleLeft, ToggleRight, Save, Coins,
+  TrendingUp, ToggleLeft, ToggleRight, Save,
 } from 'lucide-react'
 import AdminNavbar from '@/components/AdminNavbar'
 
@@ -156,7 +155,6 @@ export default function AdminSwapsPage() {
 
   // ── Admin state ──
   const [adminInfo, setAdminInfo] = useState<AdminInfo | null>(null)
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   // ── Swap list state ──
   const [swaps, setSwaps]       = useState<AdminSwap[]>([])
