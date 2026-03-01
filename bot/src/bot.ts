@@ -56,7 +56,7 @@ const app = express();
 const allowedOrigins = [MINI_APP_URL, 'http://localhost:3000', 'http://localhost:3001'];
 
 app.use(cors({
-  origin: function (origin, callback) {
+  origin: function (origin: any, callback: any) {
     // allow requests with no origin (like mobile apps, curl requests)
     if (!origin) return callback(null, true);
     
