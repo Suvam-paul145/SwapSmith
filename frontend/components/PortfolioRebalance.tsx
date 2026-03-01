@@ -6,8 +6,6 @@ import {
   TrendingUp, 
   Plus, 
   Trash2, 
-  Settings, 
-  RefreshCw, 
   Loader2,
   AlertCircle,
   CheckCircle,

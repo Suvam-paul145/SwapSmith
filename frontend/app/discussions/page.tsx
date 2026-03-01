@@ -106,7 +106,7 @@ export default function DiscussionsPage() {
       setDiscussions(prev => prev.filter(d => d.id !== id));
       const response = await fetch(`/api/discussions?id=${id}&userId=${user.uid}`, { method: "DELETE" });
       if (!response.ok) fetchDiscussions();
-    } catch (error) {
+    } catch {
       fetchDiscussions();
     }
   };
@@ -122,7 +122,7 @@ export default function DiscussionsPage() {
         body: JSON.stringify({ id }),
       });
       if (!response.ok) fetchDiscussions();
-    } catch (error) {
+    } catch {
       fetchDiscussions();
     }
   };

@@ -861,7 +861,7 @@ export async function removeFromWatchlist(
     return false;
   }
   
-  const result = await db.delete(watchlist)
+  await db.delete(watchlist)
     .where(and(
       eq(watchlist.userId, userId),
       eq(watchlist.coin, coin),

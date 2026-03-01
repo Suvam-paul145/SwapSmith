@@ -5,8 +5,9 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAggregatedQuotes, getSingleBridgeQuote } from '../../../shared/services/bridge-aggregator';
-import { optimizeRoutes, compareRoutes } from '../../../shared/services/route-optimizer';
+import { optimizeRoutes, compareRoutes, OptimizedRoute, RouteComparison } from '../../../shared/services/route-optimizer';
 import { DEFAULT_BRIDGE_PREFERENCES, BridgePreferences } from '../../../shared/config/bridge-config';
+import { BridgeQuote } from '../../../shared/services/bridges/base-bridge-adapter';
 import { csrfGuard } from '@/lib/csrf';
 import logger from '@/lib/logger';
 
@@ -23,11 +24,11 @@ export interface BridgeQuoteRequest {
 export interface BridgeQuoteResponse {
   success: boolean;
   data?: {
-    quotes: Record<string, unknown>[];
-    bestQuote: Record<string, unknown> | null;
-    recommendedQuote: Record<string, unknown> | null;
-    optimizedRoutes?: Record<string, unknown>[];
-    comparison?: Record<string, unknown>;
+    quotes: BridgeQuote[];
+    bestQuote: BridgeQuote | null;
+    recommendedQuote: BridgeQuote | null;
+    optimizedRoutes?: OptimizedRoute[];
+    comparison?: RouteComparison;
     availableBridges: string[];
     errors?: Record<string, unknown>;
   };
