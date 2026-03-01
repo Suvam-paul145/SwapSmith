@@ -168,10 +168,15 @@ export class OrderMonitor {
         try {
             await this.loadPendingOrders(); // Reload any missing from DB
 
-            // Force a poll on all pending orders immediately
+            // Force a poll on all pending orders immediately, but respect MAX_CONCURRENT
             const allTracked = Array.from(this.tracked.values());
-            await Promise.allSettled(allTracked.map(order => this.pollOrder(order)));
+            const total = allTracked.length;
+            const batchSize = MAX_CONCURRENT;
 
+            for (let i = 0; i < total; i += batchSize) {
+                const batch = allTracked.slice(i, i + batchSize);
+                await Promise.allSettled(batch.map(order => this.pollOrder(order)));
+            }
             logger.info(`[OrderMonitor] Reconciliation complete for ${allTracked.length} orders.`);
         } catch (error) {
             logger.error(`[OrderMonitor] Reconciliation failed:`, error);
