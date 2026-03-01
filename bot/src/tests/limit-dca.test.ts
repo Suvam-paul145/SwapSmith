@@ -1,5 +1,3 @@
-process.env.GROQ_API_KEY = 'test_key_for_groq';
-
 import { parseUserCommand } from '../services/parseUserCommand'; // Fixed import
 import * as priceMonitor from '../services/price-monitor';
 import * as db from '../services/database';
