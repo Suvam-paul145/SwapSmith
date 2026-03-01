@@ -8,7 +8,10 @@ function createMockDeps(overrides?: Partial<OrderMonitorDeps>): OrderMonitorDeps
     return {
         getOrderStatus: jest.fn().mockResolvedValue({ id: 'test', status: 'pending' } as SideShiftOrderStatus),
         updateOrderStatus: jest.fn().mockResolvedValue(undefined),
+        updateWatchedOrderStatus: jest.fn().mockResolvedValue(undefined),
         getPendingOrders: jest.fn().mockResolvedValue([]),
+        getPendingWatchedOrders: jest.fn().mockResolvedValue([]),
+        addWatchedOrder: jest.fn().mockResolvedValue(undefined),
         onStatusChange: jest.fn(),
         ...overrides,
     };
