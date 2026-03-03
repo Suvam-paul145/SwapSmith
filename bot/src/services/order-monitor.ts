@@ -219,9 +219,8 @@ export class OrderMonitor {
     private async tick(): Promise<void> {
         const now = Date.now();
 
-        // Skip polling if rate-limited
+        // Skip polling if rate-limited (log only at debug level to avoid noise)
         if (now < this.rateLimitCooldownUntil) {
-            logger.warn(`[OrderMonitor] Rate-limited — cooling down for ${Math.ceil((this.rateLimitCooldownUntil - now) / 1000)}s`);
             return;
         }
 
