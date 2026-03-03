@@ -65,6 +65,10 @@
     "setupFiles": [
       "<rootDir>/jest.setup.js"
     ],
-    "verbose": true
+    "verbose": true,
+    "modulePaths": [
+      "<rootDir>/node_modules",
+      "<rootDir>/../shared/node_modules"
+    ]
   }
 }
