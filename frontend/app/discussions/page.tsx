@@ -40,6 +40,7 @@ export default function DiscussionsPage() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [submitting, setSubmitting] = useState(false);
   const [showMessageBox, setShowMessageBox] = useState(false);
+  const [moderationError, setModerationError] = useState("");
 
   // Fetch discussions
   const fetchDiscussions = useCallback(async () => {
@@ -70,6 +71,7 @@ export default function DiscussionsPage() {
     e.preventDefault();
     if (!user) return;
     if (newMessage.trim().length < 5) return;
+    setModerationError("");
 
     try {
       setSubmitting(true);
@@ -84,6 +86,12 @@ export default function DiscussionsPage() {
         }),
       });
 
+      if (response.status === 422) {
+        const result = await response.json();
+        setModerationError(result.error || "Your post was rejected by content moderation.");
+        return;
+      }
+
       if (response.ok) {
         const result = await response.json();
         if (result.discussion) {
@@ -91,6 +99,7 @@ export default function DiscussionsPage() {
         }
         setNewMessage("");
         setShowMessageBox(false);
+        setModerationError("");
         setTimeout(() => fetchDiscussions(), 500);
       }
     } catch (error) {
@@ -268,11 +277,17 @@ export default function DiscussionsPage() {
                       <form onSubmit={handleSubmit}>
                         <textarea
                           value={newMessage}
-                          onChange={(e) => setNewMessage(e.target.value)}
+                          onChange={(e) => { setNewMessage(e.target.value); setModerationError(""); }}
                           placeholder="Broadcast your insight to the terminal..."
                           className="w-full bg-tertiary text-primary placeholder-muted rounded-3xl p-6 text-sm font-medium focus:ring-4 focus:ring-accent-primary/10 transition-all min-h-[160px] resize-none border border-primary shadow-inner outline-none"
                           autoFocus
                         />
+                        {moderationError && (
+                          <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3">
+                            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                            <p className="text-red-400 text-xs font-bold">{moderationError}</p>
+                          </div>
+                        )}
                         <div className="flex justify-between items-center mt-6">
                           <span className="text-[10px] font-black text-muted uppercase tracking-widest">
                             Buffer: {newMessage.length} / 5000 units
