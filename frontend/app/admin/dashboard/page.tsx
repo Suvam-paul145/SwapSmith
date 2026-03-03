@@ -7,7 +7,7 @@ import { signOut } from 'firebase/auth'
 import {
   BarChart2, Users, ArrowLeftRight, TrendingUp, AlertTriangle,
   Activity, Clock, CheckCircle2, XCircle,
-  Layers, Zap,
+  Layers, Zap, Shield,
 } from 'lucide-react'
 import AdminNavbar from '@/components/AdminNavbar'
 
@@ -131,6 +131,21 @@ export default function AdminDashboardPage() {
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
   const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [auditLogs, setAuditLogs] = useState<{ adminEmail: string; action: string; targetId: string | null; details: Record<string, unknown> | null; createdAt: string }[]>([])
+
+  const fetchAuditLogs = useCallback(async () => {
+    const token = sessionStorage.getItem('admin-token')
+    if (!token) return
+    try {
+      const res = await fetch('/api/admin/audit-logs?limit=20', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success) setAuditLogs(data.data.logs)
+      }
+    } catch { /* silent — audit log is supplementary */ }
+  }, [])
 
   const fetchAnalytics = useCallback(async () => {
     const token = sessionStorage.getItem('admin-token')
@@ -166,8 +181,9 @@ export default function AdminDashboardPage() {
     const cached = sessionStorage.getItem('admin-info')
     if (cached) { try { setAdminInfo(JSON.parse(cached)) } catch {} }
     fetchAnalytics()
+    fetchAuditLogs()
     // Auto-refresh every 60 s
-    const t = setInterval(fetchAnalytics, 60_000)
+    const t = setInterval(() => { fetchAnalytics(); fetchAuditLogs() }, 60_000)
     return () => clearInterval(t)
   }, [fetchAnalytics])
 
@@ -338,6 +354,47 @@ export default function AdminDashboardPage() {
                     <td style={{ padding: '10px 12px' }}>{statusBadge(s.status)}</td>
                     <td style={{ padding: '10px 12px', color: '#52525b', whiteSpace: 'nowrap' }}>
                       {s.createdAt ? new Date(s.createdAt).toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Admin Audit Log ──────────────────────────────────────────────── */}
+        <div style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 12, padding: '20px 24px', marginBottom: 24 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>
+            <Shield size={16} style={{ display: 'inline', marginRight: 6, color: '#7c3aed', verticalAlign: 'middle' }} />
+            Admin Audit Log (Last 20 Actions)
+          </h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #27272a' }}>
+                  {['Admin', 'Action', 'Target', 'Details', 'Date'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '8px 12px', color: '#52525b', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.length === 0 ? (
+                  <tr><td colSpan={5} style={{ padding: '20px 12px', color: '#52525b', textAlign: 'center' }}>No audit log entries yet.</td></tr>
+                ) : auditLogs.map((log, i) => (
+                  <tr key={i} style={{ borderBottom: i < auditLogs.length - 1 ? '1px solid #18182a' : 'none' }}>
+                    <td style={{ padding: '10px 12px', color: '#a1a1aa', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={log.adminEmail}>{log.adminEmail}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{
+                        display: 'inline-block', background: '#7c3aed22', color: '#7c3aed',
+                        border: '1px solid #7c3aed44', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
+                      }}>{log.action}</span>
+                    </td>
+                    <td style={{ padding: '10px 12px', color: '#a1a1aa' }}>{log.targetId || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: '#52525b', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={log.details ? JSON.stringify(log.details) : ''}>{log.details ? JSON.stringify(log.details) : '—'}</td>
+                    <td style={{ padding: '10px 12px', color: '#52525b', whiteSpace: 'nowrap' }}>
+                      {log.createdAt ? new Date(log.createdAt).toLocaleString() : '—'}
                     </td>
                   </tr>
                 ))}
