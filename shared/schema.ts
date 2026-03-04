@@ -662,3 +662,41 @@ export const coinGiftLogsRelations = relations(coinGiftLogs, ({ one }) => ({
 }));
 
 export type CoinGiftLog = typeof coinGiftLogs.$inferSelect;
+
+// --- ADMIN AUDIT LOGS ---
+
+export const adminAuditActionType = pgEnum('admin_audit_action_type', [
+  'login',
+  'logout',
+  'user_suspend',
+  'user_unsuspend',
+  'user_flag',
+  'user_unflag',
+  'coin_gift',
+  'coin_deduct',
+  'coin_reset',
+  'swap_stop',
+  'swap_resume',
+  'config_change',
+  'admin_approve',
+  'admin_reject',
+  'role_change',
+]);
+
+export const adminAuditLogs = pgTable('admin_audit_logs', {
+  id: serial('id').primaryKey(),
+  adminId: text('admin_id').notNull(),
+  adminEmail: text('admin_email').notNull(),
+  action: adminAuditActionType('action').notNull(),
+  targetId: text('target_id'),
+  targetType: text('target_type'),
+  details: jsonb('details'),
+  ipAddress: text('ip_address'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => [
+  index('idx_admin_audit_logs_admin').on(table.adminId),
+  index('idx_admin_audit_logs_action').on(table.action),
+  index('idx_admin_audit_logs_created_at').on(table.createdAt),
+]);
+
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;

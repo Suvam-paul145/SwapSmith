@@ -54,6 +54,9 @@ const MAX_CONCURRENT = 5;
 /** How often the tick loop runs (ms) */
 const TICK_INTERVAL = 10_000; // 10 seconds
 
+/** Default cooldown duration when a 429 is received (ms) */
+const DEFAULT_RATE_LIMIT_COOLDOWN = 60_000; // 60 seconds
+
 // --- Backoff Logic ---
 
 /**
@@ -79,6 +82,9 @@ export class OrderMonitor {
     private tickTimer: ReturnType<typeof setInterval> | null = null;
     private activePollCount = 0;
     private deps: OrderMonitorDeps;
+
+    /** Timestamp (ms) until which polling is paused due to a 429 rate-limit response */
+    private rateLimitCooldownUntil = 0;
 
     constructor(deps: OrderMonitorDeps) {
         this.deps = deps;
@@ -202,11 +208,22 @@ export class OrderMonitor {
         return Array.from(this.tracked.keys());
     }
 
+    /** Returns true if the monitor is currently in a rate-limit cooldown. */
+    get isRateLimited(): boolean {
+        return Date.now() < this.rateLimitCooldownUntil;
+    }
+
     // --- Internal ---
 
     /** Single tick: evaluate which orders need polling and poll them. */
     private async tick(): Promise<void> {
         const now = Date.now();
+
+        // Skip polling if rate-limited (log only at debug level to avoid noise)
+        if (now < this.rateLimitCooldownUntil) {
+            return;
+        }
+
         const toPoll: TrackedOrder[] = [];
 
         for (const order of this.tracked.values()) {
@@ -261,11 +278,55 @@ export class OrderMonitor {
                 }
             }
         } catch (error) {
-            logger.error(`[OrderMonitor] Error polling order ${order.orderId}:`, error);
+            // Handle HTTP 429 rate-limit responses
+            if (this.isRateLimitError(error)) {
+                const retryAfter = this.extractRetryAfter(error);
+                const cooldown = retryAfter > 0 ? retryAfter * 1000 : DEFAULT_RATE_LIMIT_COOLDOWN;
+                this.rateLimitCooldownUntil = Date.now() + cooldown;
+                logger.warn(`[OrderMonitor] Rate-limited (429) — pausing polling for ${cooldown / 1000}s`);
+            } else {
+                logger.error(`[OrderMonitor] Error polling order ${order.orderId}:`, error);
+            }
 
             // Don't remove — will retry on next tick
         } finally {
             this.activePollCount--;
         }
+    }
+
+    /** Check whether an error represents an HTTP 429 rate-limit response. */
+    private isRateLimitError(error: unknown): boolean {
+        if (error && typeof error === 'object') {
+            const err = error as Record<string, unknown>;
+            // Axios-style: error.response.status === 429
+            if (err.response && typeof err.response === 'object') {
+                const resp = err.response as Record<string, unknown>;
+                if (resp.status === 429) return true;
+            }
+            // Generic status property
+            if (err.status === 429) return true;
+            // Fetch-style or custom error code
+            if (err.statusCode === 429) return true;
+        }
+        return false;
+    }
+
+    /** Extract the Retry-After header value (in seconds) from a rate-limit error, or 0 if absent. */
+    private extractRetryAfter(error: unknown): number {
+        if (error && typeof error === 'object') {
+            const err = error as Record<string, unknown>;
+            if (err.response && typeof err.response === 'object') {
+                const resp = err.response as Record<string, unknown>;
+                if (resp.headers && typeof resp.headers === 'object') {
+                    const headers = resp.headers as Record<string, string>;
+                    const retryAfter = headers['retry-after'];
+                    if (retryAfter) {
+                        const parsed = parseInt(retryAfter, 10);
+                        if (!isNaN(parsed) && parsed > 0) return parsed;
+                    }
+                }
+            }
+        }
+        return 0;
     }
 }

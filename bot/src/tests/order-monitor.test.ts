@@ -339,4 +339,158 @@ describe('OrderMonitor', () => {
             expect(onStatusChange).not.toHaveBeenCalled();
         });
     });
+
+    describe('rate-limit handling', () => {
+        it('activates cooldown on HTTP 429 response (axios-style)', async () => {
+            jest.useFakeTimers();
+
+            const rateLimitError = {
+                response: { status: 429, headers: { 'retry-after': '30' } },
+            };
+            const getOrderStatus = jest.fn().mockRejectedValue(rateLimitError);
+            const deps = createMockDeps({ getOrderStatus });
+            const monitor = new OrderMonitor(deps);
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            monitor.trackOrder('order-429', 100, new Date());
+            monitor.start();
+
+            // Advance past tick interval to trigger polling
+            jest.advanceTimersByTime(11_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(monitor.isRateLimited).toBe(true);
+
+            monitor.stop();
+            consoleSpy.mockRestore();
+        });
+
+        it('skips polling while rate-limited', async () => {
+            jest.useFakeTimers();
+
+            const rateLimitError = {
+                response: { status: 429, headers: {} },
+            };
+            const getOrderStatus = jest.fn()
+                .mockRejectedValueOnce(rateLimitError)
+                .mockResolvedValue({ id: 'order-1', status: 'pending' } as unknown as SideShiftOrderStatus);
+
+            const deps = createMockDeps({ getOrderStatus });
+            const monitor = new OrderMonitor(deps);
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            monitor.trackOrder('order-1', 100, new Date());
+            monitor.start();
+
+            // First tick: triggers 429
+            jest.advanceTimersByTime(11_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            const callCountAfter429 = getOrderStatus.mock.calls.length;
+
+            // Second tick while still in cooldown: should NOT poll
+            jest.advanceTimersByTime(11_000);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(getOrderStatus.mock.calls.length).toBe(callCountAfter429);
+
+            monitor.stop();
+            consoleSpy.mockRestore();
+        });
+
+        it('uses Retry-After header when present', async () => {
+            jest.useFakeTimers();
+
+            const rateLimitError = {
+                response: { status: 429, headers: { 'retry-after': '120' } },
+            };
+            const getOrderStatus = jest.fn().mockRejectedValue(rateLimitError);
+            const deps = createMockDeps({ getOrderStatus });
+            const monitor = new OrderMonitor(deps);
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            monitor.trackOrder('order-retry', 100, new Date());
+            monitor.start();
+
+            jest.advanceTimersByTime(11_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // Should be rate-limited
+            expect(monitor.isRateLimited).toBe(true);
+
+            // Advance 60s — still rate-limited (Retry-After was 120s)
+            jest.advanceTimersByTime(60_000);
+            expect(monitor.isRateLimited).toBe(true);
+
+            // Advance past 120s total — no longer rate-limited
+            jest.advanceTimersByTime(61_000);
+            expect(monitor.isRateLimited).toBe(false);
+
+            monitor.stop();
+            consoleSpy.mockRestore();
+        });
+
+        it('falls back to default cooldown when Retry-After is absent', async () => {
+            jest.useFakeTimers();
+
+            const rateLimitError = { response: { status: 429, headers: {} } };
+            const getOrderStatus = jest.fn().mockRejectedValue(rateLimitError);
+            const deps = createMockDeps({ getOrderStatus });
+            const monitor = new OrderMonitor(deps);
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            monitor.trackOrder('order-default', 100, new Date());
+            monitor.start();
+
+            jest.advanceTimersByTime(11_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(monitor.isRateLimited).toBe(true);
+
+            // Default cooldown is 60s — advance 59s, still limited
+            jest.advanceTimersByTime(59_000);
+            expect(monitor.isRateLimited).toBe(true);
+
+            // Advance 2 more seconds — past 60s total, no longer limited
+            jest.advanceTimersByTime(2_000);
+            expect(monitor.isRateLimited).toBe(false);
+
+            monitor.stop();
+            consoleSpy.mockRestore();
+        });
+
+        it('keeps the order tracked after a 429 error', async () => {
+            jest.useFakeTimers();
+
+            const rateLimitError = { response: { status: 429, headers: {} } };
+            const getOrderStatus = jest.fn().mockRejectedValue(rateLimitError);
+            const deps = createMockDeps({ getOrderStatus });
+            const monitor = new OrderMonitor(deps);
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            monitor.trackOrder('order-kept', 100, new Date());
+            monitor.start();
+
+            jest.advanceTimersByTime(11_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // Order should still be tracked
+            expect(monitor.trackedCount).toBe(1);
+            expect(monitor.getTrackedOrderIds()).toContain('order-kept');
+
+            monitor.stop();
+            consoleSpy.mockRestore();
+        });
+    });
 });

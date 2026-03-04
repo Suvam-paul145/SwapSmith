@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDiscussions, createDiscussion, deleteDiscussion, likeDiscussion } from '@/lib/database';
 import { adminAuth } from '@/lib/firebase-admin';
+import { moderateContent } from '@/lib/content-moderation';
 
 // GET /api/discussions - Get all discussions or filtered by category
 export async function GET(request: NextRequest) {
@@ -62,6 +63,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Content must be at least 5 characters' },
         { status: 400 }
+      );
+    }
+
+    // Content moderation — check for spam, profanity, and rate limits
+    const moderation = moderateContent(content.trim(), userId);
+    if (!moderation.allowed) {
+      return NextResponse.json(
+        { error: moderation.reason || 'Content rejected by moderation.' },
+        { status: 422 }
       );
     }
 

@@ -150,6 +150,130 @@ describe("RewardToken (SMTH)", function () {
         token.connect(user1).mintToTreasury(ethers.parseEther("100"))
       ).to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount");
     });
+
+    it("should revert if minting would exceed the cap", async function () {
+      const { token, owner } = await loadFixture(deployRewardTokenFixture);
+
+      // Default cap is 10,000,000. Already minted 1,000,000. Try to mint 9,000,001.
+      const excessAmount = ethers.parseEther("9000001");
+      await expect(
+        token.connect(owner).mintToTreasury(excessAmount)
+      ).to.be.revertedWith("RewardToken: minting would exceed cap");
+    });
+
+    it("should allow minting up to exactly the cap", async function () {
+      const { token, owner } = await loadFixture(deployRewardTokenFixture);
+
+      // Mint exactly 9,000,000 more (total = 10,000,000 = DEFAULT_MAX_SUPPLY)
+      const maxMint = ethers.parseEther("9000000");
+      await token.connect(owner).mintToTreasury(maxMint);
+
+      expect(await token.totalSupply()).to.equal(ethers.parseEther("10000000"));
+    });
+  });
+
+  // ─── Minting cap management ─────────────────────────────────────────────
+
+  describe("Minting cap", function () {
+    it("should set DEFAULT_MAX_SUPPLY to 10,000,000 tokens", async function () {
+      const { token } = await loadFixture(deployRewardTokenFixture);
+      expect(await token.DEFAULT_MAX_SUPPLY()).to.equal(ethers.parseEther("10000000"));
+    });
+
+    it("should initialize mintingCap to DEFAULT_MAX_SUPPLY", async function () {
+      const { token } = await loadFixture(deployRewardTokenFixture);
+      expect(await token.mintingCap()).to.equal(ethers.parseEther("10000000"));
+    });
+
+    it("should allow owner to increase the minting cap", async function () {
+      const { token, owner } = await loadFixture(deployRewardTokenFixture);
+
+      const newCap = ethers.parseEther("20000000");
+      await expect(token.connect(owner).setMintingCap(newCap))
+        .to.emit(token, "MintingCapUpdated")
+        .withArgs(ethers.parseEther("10000000"), newCap);
+
+      expect(await token.mintingCap()).to.equal(newCap);
+    });
+
+    it("should allow owner to decrease the cap to current supply", async function () {
+      const { token, owner } = await loadFixture(deployRewardTokenFixture);
+
+      // Cap can be lowered to current totalSupply (1,000,000)
+      const currentSupply = await token.totalSupply();
+      await token.connect(owner).setMintingCap(currentSupply);
+
+      expect(await token.mintingCap()).to.equal(currentSupply);
+    });
+
+    it("should revert if new cap is below current total supply", async function () {
+      const { token, owner } = await loadFixture(deployRewardTokenFixture);
+
+      const belowSupply = ethers.parseEther("999999");
+      await expect(
+        token.connect(owner).setMintingCap(belowSupply)
+      ).to.be.revertedWith("RewardToken: cap below current supply");
+    });
+
+    it("should revert if non-owner tries to set minting cap", async function () {
+      const { token, user1 } = await loadFixture(deployRewardTokenFixture);
+
+      await expect(
+        token.connect(user1).setMintingCap(ethers.parseEther("50000000"))
+      ).to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount");
+    });
+  });
+
+  // ─── Two-step ownership transfer ────────────────────────────────────────
+
+  describe("Two-step ownership transfer", function () {
+    it("should propose a new owner via transferOwnership", async function () {
+      const { token, owner, user1 } = await loadFixture(deployRewardTokenFixture);
+
+      await expect(token.connect(owner).transferOwnership(user1.address))
+        .to.emit(token, "OwnershipTransferProposed")
+        .withArgs(owner.address, user1.address);
+
+      expect(await token.pendingOwner()).to.equal(user1.address);
+      // Owner should not change yet
+      expect(await token.owner()).to.equal(owner.address);
+    });
+
+    it("should allow pending owner to accept ownership", async function () {
+      const { token, owner, user1 } = await loadFixture(deployRewardTokenFixture);
+
+      await token.connect(owner).transferOwnership(user1.address);
+      await token.connect(user1).acceptOwnership();
+
+      expect(await token.owner()).to.equal(user1.address);
+      expect(await token.pendingOwner()).to.equal(ethers.ZeroAddress);
+    });
+
+    it("should revert if non-pending-owner tries to accept ownership", async function () {
+      const { token, owner, user1, user2 } = await loadFixture(deployRewardTokenFixture);
+
+      await token.connect(owner).transferOwnership(user1.address);
+
+      await expect(
+        token.connect(user2).acceptOwnership()
+      ).to.be.revertedWith("RewardToken: caller is not pending owner");
+    });
+
+    it("should revert if transferOwnership is called with zero address", async function () {
+      const { token, owner } = await loadFixture(deployRewardTokenFixture);
+
+      await expect(
+        token.connect(owner).transferOwnership(ethers.ZeroAddress)
+      ).to.be.revertedWith("RewardToken: new owner is zero address");
+    });
+
+    it("should revert if non-owner tries to transfer ownership", async function () {
+      const { token, user1, user2 } = await loadFixture(deployRewardTokenFixture);
+
+      await expect(
+        token.connect(user1).transferOwnership(user2.address)
+      ).to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount");
+    });
   });
 
   // ─── ERC20 standard compliance ────────────────────────────────────────────
